@@ -3,7 +3,7 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Book, FileText, Lightbulb, LogOut, Settings,
-  Dna, Image, Activity, Bell, User, ExternalLink
+  Dna, Image, Activity, Bell, User, ExternalLink, Mail
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -40,8 +40,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, title, action }) =>
     {
       label: 'Yönetim',
       items: [
+        { path: '/admin/messages', icon: <Mail size={20} />, label: 'Mesajlar' },
         { path: '/admin/settings', icon: <Settings size={20} />, label: 'Ayarlar' },
-        // { path: '/admin/site-sagligi', icon: <Activity size={20} />, label: 'Site Sağlığı' },
       ]
     }
   ];
@@ -76,8 +76,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, title, action }) =>
                       key={item.path}
                       to={item.path}
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
-                          ? 'bg-bio-mint/15 text-bio-mint font-semibold shadow-[inset_3px_0_0_0_#00D9A3]'
-                          : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                        ? 'bg-bio-mint/15 text-bio-mint font-semibold shadow-[inset_3px_0_0_0_#00D9A3]'
+                        : 'text-slate-400 hover:bg-white/5 hover:text-white'
                         }`}
                     >
                       <span className={`${isActive ? 'text-bio-mint' : 'text-slate-500 group-hover:text-white'}`}>

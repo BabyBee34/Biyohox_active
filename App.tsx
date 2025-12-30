@@ -1,26 +1,38 @@
-
-import React from 'react';
-import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import React, { Suspense, lazy } from 'react';
+import { HashRouter as Router, Routes, Route, useLocation, Link, useNavigate } from 'react-router-dom';
+import { Loader2, Home, AlertTriangle, ArrowLeft, LogOut, Shield, HelpCircle, Mail } from 'lucide-react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
-import Home from './pages/Home';
-import Lessons from './pages/Lessons';
-import LessonDetail from './pages/LessonDetail';
-import Notes from './pages/Notes';
-import NoteDetail from './pages/NoteDetail';
-import InterestingFacts from './pages/InterestingFacts';
-import PostDetail from './pages/PostDetail';
-import Contact from './pages/Contact';
-import FAQ from './pages/FAQ';
-import AdminDashboard from './pages/AdminDashboard';
-import AdminLogin from './pages/AdminLogin';
-import LessonManager from './pages/admin/LessonManager';
-import LessonBuilder from './pages/admin/LessonBuilder';
-import NoteManager from './pages/admin/NoteManager';
-import PostManager from './pages/admin/PostManager';
-import PostEditor from './pages/admin/PostEditor';
+import ErrorBoundary from './components/ErrorBoundary';
 import { usePageTracking } from './hooks/usePageTracking';
+import { supabase } from './lib/supabase';
+
+// Lazy loading for code splitting (P1 düzeltmesi)
+const Home_ = lazy(() => import('./pages/Home'));
+const Lessons = lazy(() => import('./pages/Lessons'));
+const LessonDetail = lazy(() => import('./pages/LessonDetail'));
+const Notes = lazy(() => import('./pages/Notes'));
+const NoteDetail = lazy(() => import('./pages/NoteDetail'));
+const InterestingFacts = lazy(() => import('./pages/InterestingFacts'));
+const PostDetail = lazy(() => import('./pages/PostDetail'));
+const Contact = lazy(() => import('./pages/Contact'));
+const FAQ = lazy(() => import('./pages/FAQ'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const LessonManager = lazy(() => import('./pages/admin/LessonManager'));
+const LessonBuilder = lazy(() => import('./pages/admin/LessonBuilder'));
+const NoteManager = lazy(() => import('./pages/admin/NoteManager'));
+const PostManager = lazy(() => import('./pages/admin/PostManager'));
+const PostEditor = lazy(() => import('./pages/admin/PostEditor'));
+const MessageManager = lazy(() => import('./pages/admin/MessageManager'));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+  </div>
+);
 
 // Scroll to top on route change
 const ScrollToTop = () => {
@@ -37,26 +49,103 @@ const PageTracker = () => {
   return null;
 };
 
-// Admin Ayarlar Sayfası
+// 404 Sayfası (U1 düzeltmesi - iyileştirilmiş)
+const NotFoundPage: React.FC = () => (
+  <div className="min-h-[70vh] flex items-center justify-center px-4">
+    <div className="text-center max-w-md">
+      <div className="w-24 h-24 bg-bio-mint/10 rounded-full flex items-center justify-center mx-auto mb-6">
+        <AlertTriangle className="w-12 h-12 text-bio-mint" />
+      </div>
+      <h1 className="text-6xl font-bold font-display text-slate-900 mb-4">404</h1>
+      <h2 className="text-2xl font-bold text-slate-700 mb-4">Sayfa Bulunamadı</h2>
+      <p className="text-slate-500 mb-8">
+        Aradığınız sayfa mevcut değil veya taşınmış olabilir.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <Link
+          to="/"
+          className="flex items-center justify-center gap-2 px-6 py-3 bg-bio-mint text-white rounded-xl font-bold hover:bg-bio-mint-dark transition-colors"
+        >
+          <Home size={18} /> Anasayfa
+        </Link>
+        <Link
+          to="/dersler"
+          className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+        >
+          <ArrowLeft size={18} /> Derslere Git
+        </Link>
+      </div>
+    </div>
+  </div>
+);
+
+// Admin Ayarlar Sayfası (düzeltildi - Supabase auth kullanıyor)
 const AdminSettings: React.FC = () => {
-  const handleLogout = () => {
-    localStorage.removeItem('biyohox_admin_session');
-    window.location.href = '/#/admin';
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/admin');
   };
 
   return (
     <div className="p-10 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Ayarlar</h1>
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
-        <div>
-          <h2 className="font-bold text-gray-800 mb-2">Oturum</h2>
-          <p className="text-gray-500 text-sm mb-4">Mevcut admin oturumunuzu sonlandırın.</p>
-          <button
-            onClick={handleLogout}
-            className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
-          >
-            Çıkış Yap
-          </button>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8 font-display">Ayarlar</h1>
+
+      <div className="space-y-6">
+        {/* Oturum */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center text-red-600">
+              <LogOut size={20} />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-bold text-gray-800 mb-1">Oturum</h2>
+              <p className="text-gray-500 text-sm mb-4">Mevcut admin oturumunuzu sonlandırın.</p>
+              <button
+                onClick={handleLogout}
+                className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+              >
+                Çıkış Yap
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Güvenlik Bilgisi */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center text-green-600">
+              <Shield size={20} />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-bold text-gray-800 mb-1">Güvenlik</h2>
+              <p className="text-gray-500 text-sm">
+                Oturumunuz Supabase Authentication ile korunmaktadır. Şifrenizi değiştirmek için Supabase Dashboard'u kullanın.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Yardım */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+              <HelpCircle size={20} />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-bold text-gray-800 mb-1">Yardım</h2>
+              <p className="text-gray-500 text-sm mb-3">
+                Teknik destek ve sorular için iletişime geçin.
+              </p>
+              <a
+                href="mailto:info@biyohox.com"
+                className="inline-flex items-center gap-2 text-bio-mint-dark font-medium hover:underline"
+              >
+                <Mail size={16} /> info@biyohox.com
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -130,54 +219,60 @@ const TermsPage: React.FC = () => (
 
 const App: React.FC = () => {
   return (
-    <Router>
-      <ScrollToTop />
-      <PageTracker />
-      <div className="flex flex-col min-h-screen bg-gray-50 font-sans text-slate-800">
-        <Routes>
-          {/* Admin Routes without Navbar/Footer - Protected */}
-          <Route path="/admin" element={<AdminLogin />} />
-          <Route path="/admin/dashboard" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+    <ErrorBoundary>
+      <Router>
+        <ScrollToTop />
+        <PageTracker />
+        <div className="flex flex-col min-h-screen bg-gray-50 font-sans text-slate-800">
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* Admin Routes without Navbar/Footer - Protected */}
+              <Route path="/admin" element={<AdminLogin />} />
+              <Route path="/admin/dashboard" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
 
-          <Route path="/admin/lessons" element={<ProtectedRoute><LessonManager /></ProtectedRoute>} />
-          <Route path="/admin/lessons/new" element={<ProtectedRoute><LessonBuilder /></ProtectedRoute>} />
-          <Route path="/admin/lessons/:id/edit" element={<ProtectedRoute><LessonBuilder /></ProtectedRoute>} />
+              <Route path="/admin/lessons" element={<ProtectedRoute><LessonManager /></ProtectedRoute>} />
+              <Route path="/admin/lessons/new" element={<ProtectedRoute><LessonBuilder /></ProtectedRoute>} />
+              <Route path="/admin/lessons/:id/edit" element={<ProtectedRoute><LessonBuilder /></ProtectedRoute>} />
 
-          <Route path="/admin/notes" element={<ProtectedRoute><NoteManager /></ProtectedRoute>} />
+              <Route path="/admin/notes" element={<ProtectedRoute><NoteManager /></ProtectedRoute>} />
 
-          <Route path="/admin/posts" element={<ProtectedRoute><PostManager /></ProtectedRoute>} />
-          <Route path="/admin/posts/new" element={<ProtectedRoute><PostEditor /></ProtectedRoute>} />
-          <Route path="/admin/posts/:id/edit" element={<ProtectedRoute><PostEditor /></ProtectedRoute>} />
+              <Route path="/admin/posts" element={<ProtectedRoute><PostManager /></ProtectedRoute>} />
+              <Route path="/admin/posts/new" element={<ProtectedRoute><PostEditor /></ProtectedRoute>} />
+              <Route path="/admin/posts/:id/edit" element={<ProtectedRoute><PostEditor /></ProtectedRoute>} />
 
-          <Route path="/admin/settings" element={<ProtectedRoute><AdminSettings /></ProtectedRoute>} />
+              <Route path="/admin/messages" element={<ProtectedRoute><MessageManager /></ProtectedRoute>} />
 
-          {/* Public Routes with Navbar/Footer */}
-          <Route path="*" element={
-            <>
-              <Navbar />
-              <main className="flex-grow">
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/dersler" element={<Lessons />} />
-                  <Route path="/dersler/:gradeSlug" element={<Lessons />} />
-                  <Route path="/dersler/:gradeSlug/:unitSlug/:lessonSlug" element={<LessonDetail />} />
-                  <Route path="/notlar" element={<Notes />} />
-                  <Route path="/notlar/:id" element={<NoteDetail />} />
-                  <Route path="/ilgincler" element={<InterestingFacts />} />
-                  <Route path="/ilgincler/:id" element={<PostDetail />} />
-                  <Route path="/iletisim" element={<Contact />} />
-                  <Route path="/sss" element={<FAQ />} />
-                  <Route path="/gizlilik" element={<PrivacyPage />} />
-                  <Route path="/kullanim" element={<TermsPage />} />
-                  <Route path="*" element={<div className="p-20 text-center text-xl">Sayfa Bulunamadı (404)</div>} />
-                </Routes>
-              </main>
-              <Footer />
-            </>
-          } />
-        </Routes>
-      </div>
-    </Router>
+              <Route path="/admin/settings" element={<ProtectedRoute><AdminSettings /></ProtectedRoute>} />
+
+              {/* Public Routes with Navbar/Footer */}
+              <Route path="*" element={
+                <>
+                  <Navbar />
+                  <main className="flex-grow">
+                    <Routes>
+                      <Route path="/" element={<Home_ />} />
+                      <Route path="/dersler" element={<Lessons />} />
+                      <Route path="/dersler/:gradeSlug" element={<Lessons />} />
+                      <Route path="/dersler/:gradeSlug/:unitSlug/:lessonSlug" element={<LessonDetail />} />
+                      <Route path="/notlar" element={<Notes />} />
+                      <Route path="/notlar/:id" element={<NoteDetail />} />
+                      <Route path="/ilgincler" element={<InterestingFacts />} />
+                      <Route path="/ilgincler/:id" element={<PostDetail />} />
+                      <Route path="/iletisim" element={<Contact />} />
+                      <Route path="/sss" element={<FAQ />} />
+                      <Route path="/gizlilik" element={<PrivacyPage />} />
+                      <Route path="/kullanim" element={<TermsPage />} />
+                      <Route path="*" element={<NotFoundPage />} />
+                    </Routes>
+                  </main>
+                  <Footer />
+                </>
+              } />
+            </Routes>
+          </Suspense>
+        </div>
+      </Router>
+    </ErrorBoundary>
   );
 };
 

@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, HelpCircle, MessageCircle } from 'lucide-react';
+import { ChevronDown, HelpCircle, MessageCircle, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { dbService } from '../lib/supabase';
 
 interface FAQItem {
+    id: string;
     question: string;
     answer: string;
+    order_index: number;
 }
 
-const faqData: FAQItem[] = [
+// Fallback data in case database is not available
+const fallbackFaqData: Omit<FAQItem, 'id' | 'order_index'>[] = [
     {
         question: 'BiyoHox nedir?',
         answer: 'BiyoHox, lise öğrencileri için tasarlanmış ücretsiz bir biyoloji eğitim platformudur. 9-12. sınıf müfredatına uygun ders anlatımları, testler, flashcard\'lar ve özet notlar içerir.'
@@ -24,27 +28,42 @@ const faqData: FAQItem[] = [
     {
         question: 'Mobil cihazlardan erişebilir miyim?',
         answer: 'Evet, BiyoHox tamamen responsive tasarıma sahiptir. Telefon, tablet veya bilgisayarınızdan sorunsuz bir şekilde kullanabilirsiniz.'
-    },
-    {
-        question: 'Testler nasıl çalışıyor?',
-        answer: 'Her ders sonunda interaktif testler bulunur. Soruları cevapladıktan sonra doğru cevabı ve açıklamasını görebilirsiniz. Testler puanlanır ve ilerlemeniz takip edilir.'
-    },
-    {
-        question: 'PDF notları indirebilir miyim?',
-        answer: 'Evet, "Notlar & PDF" bölümünden konu özetlerini ve çalışma materyallerini PDF formatında indirebilirsiniz.'
-    },
-    {
-        question: 'Bir hata buldum, nasıl bildiririm?',
-        answer: 'İletişim sayfamızdaki formu kullanarak veya info@biyohox.com adresine e-posta göndererek hataları bildirebilirsiniz. Her geri bildirim bizim için değerlidir!'
-    },
-    {
-        question: 'İçerik önerisinde bulunabilir miyim?',
-        answer: 'Elbette! Hangi konuların eklenmesini veya hangi özelliklerin geliştirilmesini istediğinizi İletişim sayfasından bize iletebilirsiniz.'
     }
 ];
 
 const FAQ: React.FC = () => {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const [faqs, setFaqs] = useState<FAQItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadFaqs();
+    }, []);
+
+    const loadFaqs = async () => {
+        try {
+            const data = await dbService.getFaqs();
+            if (data && data.length > 0) {
+                setFaqs(data as FAQItem[]);
+            } else {
+                // Use fallback data if database is empty
+                setFaqs(fallbackFaqData.map((item, index) => ({
+                    ...item,
+                    id: `fallback-${index}`,
+                    order_index: index
+                })));
+            }
+        } catch (error) {
+            // Use fallback data on error
+            setFaqs(fallbackFaqData.map((item, index) => ({
+                ...item,
+                id: `fallback-${index}`,
+                order_index: index
+            })));
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const toggleFAQ = (index: number) => {
         setOpenIndex(openIndex === index ? null : index);
@@ -84,50 +103,59 @@ const FAQ: React.FC = () => {
 
             {/* FAQ Content */}
             <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-                <div className="space-y-4">
-                    {faqData.map((faq, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ delay: index * 0.05 }}
-                            className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"
-                        >
-                            <button
-                                onClick={() => toggleFAQ(index)}
-                                className="w-full px-6 py-5 flex items-center justify-between text-left focus:outline-none group"
+                {loading ? (
+                    <div className="flex justify-center py-12">
+                        <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {faqs.map((faq, index) => (
+                            <motion.div
+                                key={faq.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: index * 0.05 }}
+                                className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"
                             >
-                                <span className="font-bold text-slate-800 group-hover:text-bio-mint-dark transition-colors">
-                                    {faq.question}
-                                </span>
-                                <motion.div
-                                    animate={{ rotate: openIndex === index ? 180 : 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="text-slate-400 group-hover:text-bio-mint transition-colors"
+                                <button
+                                    onClick={() => toggleFAQ(index)}
+                                    className="w-full px-6 py-5 flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-bio-mint group"
+                                    aria-expanded={openIndex === index}
+                                    aria-controls={`faq-answer-${faq.id}`}
                                 >
-                                    <ChevronDown size={20} />
-                                </motion.div>
-                            </button>
-
-                            <AnimatePresence>
-                                {openIndex === index && (
+                                    <span className="font-bold text-slate-800 group-hover:text-bio-mint-dark transition-colors">
+                                        {faq.question}
+                                    </span>
                                     <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: 'auto', opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
+                                        animate={{ rotate: openIndex === index ? 180 : 0 }}
                                         transition={{ duration: 0.2 }}
-                                        className="overflow-hidden"
+                                        className="text-slate-400 group-hover:text-bio-mint transition-colors"
                                     >
-                                        <div className="px-6 pb-5 text-slate-600 leading-relaxed border-t border-slate-100 pt-4">
-                                            {faq.answer}
-                                        </div>
+                                        <ChevronDown size={20} />
                                     </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </motion.div>
-                    ))}
-                </div>
+                                </button>
+
+                                <AnimatePresence>
+                                    {openIndex === index && (
+                                        <motion.div
+                                            id={`faq-answer-${faq.id}`}
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="overflow-hidden"
+                                        >
+                                            <div className="px-6 pb-5 text-slate-600 leading-relaxed border-t border-slate-100 pt-4">
+                                                {faq.answer}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </motion.div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Contact CTA */}
                 <div className="mt-16 text-center bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-10 relative overflow-hidden">

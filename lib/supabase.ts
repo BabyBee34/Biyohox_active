@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Production Supabase Credentials
+// Supabase Configuration
+// Production için .env.local dosyasında VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY tanımlı olmalı
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://kgrnvxyjqnbytdpuzyqg.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtncm52eHlqcW5ieXRkcHV6eXFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxMDQ5OTIsImV4cCI6MjA4MjY4MDk5Mn0.uQ4N_PzOy3QG29XAjHplrl57goK0Vg7YlNl6WJiIJTA';
 
+// Supabase client'ı oluştur
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+
 
 // Database service functions
 export const dbService = {
@@ -281,5 +285,16 @@ export const dbService = {
         });
 
         return counts;
+    },
+
+    // FAQs
+    async getFaqs() {
+        const { data, error } = await supabase
+            .from('faqs')
+            .select('*')
+            .eq('is_active', true)
+            .order('order_index');
+        if (error) throw error;
+        return data;
     }
 };

@@ -140,9 +140,14 @@ const LessonManager: React.FC = () => {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => window.open(`/dersler/9-sinif/unit/${lesson.slug}`, '_blank')}
+                          onClick={() => {
+                            // Sınıf ID'sinden slug oluştur (9 -> 9-sinif)
+                            const gradeSlug = lesson.gradeId ? `${lesson.gradeId}-sinif` : '9-sinif';
+                            window.open(`/#/dersler/${gradeSlug}/unite/${lesson.slug}`, '_blank');
+                          }}
                           className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                           title="Önizle"
+                          aria-label={`${lesson.title} dersini önizle`}
                         >
                           <Eye size={18} />
                         </button>

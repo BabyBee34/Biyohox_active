@@ -23,8 +23,19 @@ const Footer: React.FC = () => {
               Lise biyolojisini sıkıcı olmaktan çıkarıp, keşfedilmeyi bekleyen canlı bir dünyaya dönüştürüyoruz.
             </p>
             <div className="flex gap-3">
-              {[Instagram, Youtube, Twitter].map((Icon, i) => (
-                <a key={i} href="#" title="Yakında" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-bio-mint hover:text-white hover:scale-110 transition-all duration-300">
+              {[
+                { Icon: Instagram, name: 'Instagram', color: 'hover:bg-pink-500' },
+                { Icon: Youtube, name: 'YouTube', color: 'hover:bg-red-500' },
+                { Icon: Twitter, name: 'Twitter', color: 'hover:bg-sky-500' }
+              ].map(({ Icon, name, color }, i) => (
+                <a
+                  key={i}
+                  href="#"
+                  className={`w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 ${color} hover:text-white hover:scale-110 transition-all duration-300 cursor-not-allowed opacity-60 hover:opacity-100`}
+                  aria-label={`${name} - Yakında`}
+                  title={`${name} - Yakında`}
+                  onClick={(e) => e.preventDefault()}
+                >
                   <Icon size={18} />
                 </a>
               ))}
@@ -87,9 +98,9 @@ const Footer: React.FC = () => {
             &copy; {new Date().getFullYear()} BiyoHox. Designed for Future Scientists.
           </p>
           <div className="flex gap-6">
-             <Link to="/gizlilik" className="text-slate-400 text-xs hover:text-slate-600 transition-colors">Gizlilik</Link>
-             <Link to="/kullanim" className="text-slate-400 text-xs hover:text-slate-600 transition-colors">Şartlar</Link>
-             <Link to="/admin" className="text-slate-400 text-xs hover:text-slate-600 transition-colors">Yönetici</Link>
+            <Link to="/gizlilik" className="text-slate-400 text-xs hover:text-slate-600 transition-colors">Gizlilik</Link>
+            <Link to="/kullanim" className="text-slate-400 text-xs hover:text-slate-600 transition-colors">Şartlar</Link>
+            <Link to="/admin" className="text-slate-400 text-xs hover:text-slate-600 transition-colors">Yönetici</Link>
           </div>
         </div>
       </div>
