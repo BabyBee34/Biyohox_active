@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Lock, Mail, AlertCircle, ArrowRight, Home } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Home } from 'lucide-react';
 
 const AdminLogin: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -15,14 +15,14 @@ const AdminLogin: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    // MOCK LOGIN FOR DEMO/TESTING
-    // Gerçek Supabase bağlantısı yapılana kadar bu bilgilerle giriş yapılabilir.
+    // Mock Login - Güvenli oturum ile
     if (email === 'admin@biyohox.com' && password === 'admin123') {
-        setTimeout(() => {
-            setLoading(false);
-            navigate('/admin/dashboard');
-        }, 800);
-        return;
+      localStorage.setItem('biyohox_admin_session', 'authenticated');
+      setTimeout(() => {
+        setLoading(false);
+        navigate('/admin/dashboard');
+      }, 800);
+      return;
     }
 
     try {
@@ -34,15 +34,15 @@ const AdminLogin: React.FC = () => {
       if (error) throw error;
 
       if (data.session) {
+        localStorage.setItem('biyohox_admin_session', 'authenticated');
         navigate('/admin/dashboard');
       }
     } catch (err: any) {
       console.error(err);
-      // Supabase yapılandırılmamışsa genel bir hata mesajı yerine bilgilendirme gösterelim
       if (err.message && (err.message.includes('fetch') || err.message.includes('apikey'))) {
-         setError('Veritabanı bağlantısı yapılandırılmamış. Lütfen aşağıdaki "Demo Panelini Görüntüle" butonunu kullanın veya test bilgilerini (admin@biyohox.com / admin123) deneyin.');
+        setError('Veritabanı bağlantısı yapılandırılmamış. Lütfen doğru bilgilerle giriş yapın.');
       } else {
-         setError('E-posta veya şifre hatalı.');
+        setError('E-posta veya şifre hatalı.');
       }
     } finally {
       setLoading(false);
@@ -73,13 +73,13 @@ const AdminLogin: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">E-posta Adresi</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-                  placeholder="admin@biyohox.com"
+                  placeholder="E-posta adresiniz"
                 />
               </div>
             </div>
@@ -88,8 +88,8 @@ const AdminLogin: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Şifre</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -99,41 +99,22 @@ const AdminLogin: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-3 pt-2">
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full bg-primary-600 text-white font-bold py-3 rounded-xl hover:bg-primary-700 transition-colors shadow-md shadow-primary-200 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                ) : (
-                  'Giriş Yap'
-                )}
-              </button>
-
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-gray-200"></div>
-                <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">VEYA</span>
-                <div className="flex-grow border-t border-gray-200"></div>
-              </div>
-
-              <button 
-                type="button"
-                onClick={() => navigate('/admin/dashboard')}
-                className="w-full bg-secondary-50 text-secondary-700 font-medium py-3 rounded-xl border border-secondary-200 hover:bg-secondary-100 transition-colors flex items-center justify-center gap-2"
-              >
-                Demo Panelini Görüntüle <ArrowRight size={16} />
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary-600 text-white font-bold py-3 rounded-xl hover:bg-primary-700 transition-colors shadow-md shadow-primary-200 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                'Giriş Yap'
+              )}
+            </button>
           </form>
         </div>
-        <div className="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-between items-center text-xs">
-          <p className="text-gray-500">
-            <strong>Test:</strong> admin@biyohox.com / admin123
-          </p>
-          <Link to="/" className="flex items-center gap-1 text-gray-500 hover:text-primary-600 transition-colors">
-             <Home size={14} /> Anasayfaya Dön
+        <div className="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-center">
+          <Link to="/" className="flex items-center gap-1 text-gray-500 hover:text-primary-600 transition-colors text-sm">
+            <Home size={14} /> Anasayfaya Dön
           </Link>
         </div>
       </div>

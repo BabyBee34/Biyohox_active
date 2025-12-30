@@ -1,18 +1,59 @@
 
-import React, { useState } from 'react';
-import { MOCK_POSTS } from '../constants';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Calendar, Clock, Tag, Lightbulb, Search, Sparkles } from 'lucide-react';
+import { ArrowRight, Calendar, Clock, Tag, Lightbulb, Search, Sparkles, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { supabase, dbService } from '../lib/supabase';
+import { BlogPost } from '../types';
 
 const InterestingFacts: React.FC = () => {
+    const [posts, setPosts] = useState<BlogPost[]>([]);
+    const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
     const [newsletterEmail, setNewsletterEmail] = useState('');
+    const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
     const allTags = ['Evrim', 'DNA', 'Genetik', 'Ekoloji', 'Hücre', 'Sağlık', 'Beyin', 'Hayvanlar'];
 
-    const filteredPosts = MOCK_POSTS.filter(post => {
+    // Load posts from Supabase
+    useEffect(() => {
+        loadPosts();
+    }, []);
+
+    const loadPosts = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('posts')
+                .select('*')
+                .eq('is_published', true)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            const mappedPosts: BlogPost[] = (data || []).map(post => ({
+                id: post.id,
+                title: post.title,
+                slug: post.slug,
+                excerpt: post.excerpt || '',
+                content: post.content || '',
+                image: post.image || 'https://picsum.photos/600/400',
+                tags: post.tags || [],
+                readTime: post.read_time || 5,
+                date: new Date(post.created_at).toLocaleDateString('tr-TR', {
+                    day: 'numeric', month: 'long', year: 'numeric'
+                })
+            }));
+            setPosts(mappedPosts);
+        } catch (error) {
+            console.error('Error loading posts:', error);
+            setPosts([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const filteredPosts = posts.filter(post => {
         const matchesSearch = searchQuery === '' ||
             post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             post.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
@@ -20,11 +61,20 @@ const InterestingFacts: React.FC = () => {
         return matchesSearch && matchesTag;
     });
 
-    const handleNewsletterSubmit = (e: React.FormEvent) => {
+    const handleNewsletterSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (newsletterEmail) {
-            alert(`${newsletterEmail} adresi bültene kaydedildi! (Demo: Backend bağlantısı gerekiyor)`);
+        if (!newsletterEmail) return;
+
+        setNewsletterStatus('loading');
+        try {
+            await dbService.subscribeNewsletter(newsletterEmail);
+            setNewsletterStatus('success');
             setNewsletterEmail('');
+            setTimeout(() => setNewsletterStatus('idle'), 3000);
+        } catch (error) {
+            console.error('Newsletter error:', error);
+            setNewsletterStatus('error');
+            setTimeout(() => setNewsletterStatus('idle'), 3000);
         }
     };
 
@@ -181,8 +231,14 @@ const InterestingFacts: React.FC = () => {
                                         required
                                         className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:bg-white/20 focus:border-bio-mint/50 transition-all text-sm"
                                     />
-                                    <button type="submit" className="w-full bg-bio-mint hover:bg-bio-mint-light text-slate-900 font-bold py-3 rounded-xl transition-colors shadow-lg shadow-bio-mint/20">
-                                        Abone Ol
+                                    <button
+                                        type="submit"
+                                        disabled={newsletterStatus === 'loading'}
+                                        className="w-full bg-bio-mint hover:bg-bio-mint-light text-slate-900 font-bold py-3 rounded-xl transition-colors shadow-lg shadow-bio-mint/20 disabled:opacity-70"
+                                    >
+                                        {newsletterStatus === 'loading' ? 'Kaydediliyor...' :
+                                            newsletterStatus === 'success' ? '✓ Kayıt Başarılı!' :
+                                                newsletterStatus === 'error' ? 'Hata! Tekrar Dene' : 'Abone Ol'}
                                     </button>
                                 </form>
                                 <p className="text-[10px] text-slate-500 mt-4">Spam yok, sadece bilim. İstediğin zaman ayrılabilirsin.</p>

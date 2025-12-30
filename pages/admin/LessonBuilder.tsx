@@ -8,7 +8,9 @@ import {
   Music, ChevronRight, FileText, Code, AlignJustify, ListOrdered, Check,
   LayoutTemplate, MousePointer2, Grid, Square, LayoutGrid, Zap, Globe, Heart, Bone, Network, FlaskConical, Microscope, ArrowRight, Dna, MousePointerClick, Leaf, Brain, Activity, CircleDashed, Thermometer
 } from 'lucide-react';
-import { GRADES, MOCK_LESSON, MOCK_UNITS } from '../../constants';
+import { GRADES } from '../../constants';
+import { dbService } from '../../lib/supabase';
+import { Unit } from '../../types';
 import { LessonBlock, SubBlock, QuizQuestion, Flashcard } from '../../types';
 import QuizComponent from '../../components/QuizComponent';
 import FlashcardDeck from '../../components/FlashcardDeck';
@@ -684,40 +686,82 @@ const LessonBuilder: React.FC = () => {
 
   // Lesson Content Blocks State
   const [blocks, setBlocks] = useState<LessonBlock[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Setup Wizard Local State
-  const [tempUnits, setTempUnits] = useState(MOCK_UNITS);
+  const [tempUnits, setTempUnits] = useState<Unit[]>([]);
   const [selectedUnit, setSelectedUnit] = useState('');
   const [isNewUnit, setIsNewUnit] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [isNewTopic, setIsNewTopic] = useState(false);
 
+  // Load units when grade is selected
+  useEffect(() => {
+    if (gradeId) {
+      loadUnits(gradeId);
+    }
+  }, [gradeId]);
+
+  const loadUnits = async (gId: string) => {
+    try {
+      const data = await dbService.getUnitsByGrade(gId);
+      const mapped: Unit[] = (data || []).map((u: any) => ({
+        id: u.id,
+        gradeId: u.grade_id,
+        title: u.title,
+        slug: u.slug || u.id,
+        topics: (u.topics || []).map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          lessons: t.lessons || []
+        }))
+      }));
+      setTempUnits(mapped);
+    } catch (error) {
+      console.error('Error loading units:', error);
+    }
+  };
+
   // Initialize data for Edit Mode
   useEffect(() => {
-    if (isEditMode) {
-      setTitle(MOCK_LESSON.title);
-      setSlug(MOCK_LESSON.slug);
-      setGradeId(MOCK_LESSON.gradeId);
-      setUnitTitle('Hücre'); // Mock value mapping
-      setTopicTitle('Hücre Zarı'); // Mock value mapping
-      setDescription(MOCK_LESSON.description);
-      setDuration(MOCK_LESSON.duration);
-      setCoverImage('https://picsum.photos/800/400');
-
-      // Migrate old image blocks if necessary
-      const migratedBlocks = MOCK_LESSON.blocks.map(b => {
-        if (b.type === 'image' && b.data.url && !b.data.items) {
-          return { ...b, data: { items: [{ url: b.data.url, caption: b.data.caption }], columns: 1 } };
-        }
-        return b;
-      });
-
-      setBlocks(migratedBlocks as LessonBlock[]);
-      setIsPublished(true);
+    if (isEditMode && id) {
+      loadLessonData(id);
     } else {
       setBlocks([{ id: 'b-init', type: 'text', content: '' }]);
     }
-  }, [isEditMode]);
+  }, [isEditMode, id]);
+
+  const loadLessonData = async (lessonId: string) => {
+    try {
+      setLoading(true);
+      const lesson = await dbService.getLessonById(lessonId);
+      if (lesson) {
+        setTitle(lesson.title);
+        setSlug(lesson.slug);
+        setGradeId(lesson.grade_id || '');
+        setUnitTitle(lesson.unit_title || '');
+        setTopicTitle(lesson.topic_title || '');
+        setDescription(lesson.description || '');
+        setDuration(lesson.duration || 15);
+        setCoverImage(lesson.cover_image || '');
+        setIsPublished(lesson.is_published || false);
+
+        // Migrate old image blocks if necessary
+        const lessonBlocks = lesson.blocks || [];
+        const migratedBlocks = lessonBlocks.map((b: any) => {
+          if (b.type === 'image' && b.data?.url && !b.data?.items) {
+            return { ...b, data: { items: [{ url: b.data.url, caption: b.data.caption }], columns: 1 } };
+          }
+          return b;
+        });
+        setBlocks(migratedBlocks as LessonBlock[]);
+      }
+    } catch (error) {
+      console.error('Error loading lesson:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Auto-generate Slug & Description in Wizard
   useEffect(() => {

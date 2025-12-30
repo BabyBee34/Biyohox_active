@@ -1,15 +1,15 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
 import {
     Plus, Trash2, Edit, Calendar, Eye, Search,
     LayoutTemplate, Save, X, ArrowRight, Image as ImageIcon,
-    Newspaper, Lightbulb, FlaskConical, History, MessageCircleQuestion, Tag
+    Newspaper, Lightbulb, FlaskConical, History, MessageCircleQuestion, Tag, Loader2
 } from 'lucide-react';
-import { MOCK_POSTS } from '../../constants';
 import { BlogPost } from '../../types';
 import RichTextEditor from '../../components/RichTextEditor';
+import { supabase } from '../../lib/supabase';
 
 // --- HTML TEMPLATES FOR BLOG POSTS ---
 const POST_TEMPLATES = [
@@ -110,14 +110,16 @@ const POST_TEMPLATES = [
 ];
 
 const PostManager: React.FC = () => {
-    const [posts, setPosts] = useState<BlogPost[]>(MOCK_POSTS);
+    const [posts, setPosts] = useState<BlogPost[]>([]);
+    const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'published' | 'draft'>('all');
     const navigate = useNavigate();
 
     // --- WIZARD STATE ---
     const [isWizardOpen, setIsWizardOpen] = useState(false);
-    const [wizardStep, setWizardStep] = useState(1); // 1: Metadata, 2: Content
+    const [wizardStep, setWizardStep] = useState(1);
     const [editorKey, setEditorKey] = useState(0);
+    const [saving, setSaving] = useState(false);
 
     // Form Data
     const [title, setTitle] = useState('');
@@ -128,9 +130,54 @@ const PostManager: React.FC = () => {
     const [content, setContent] = useState('');
     const [publishDate, setPublishDate] = useState(new Date().toISOString().split('T')[0]);
 
-    const handleDelete = (id: string) => {
+    // Load posts from Supabase
+    useEffect(() => {
+        loadPosts();
+    }, []);
+
+    const loadPosts = async () => {
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('posts')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            // Map Supabase data to BlogPost format
+            const mappedPosts: BlogPost[] = (data || []).map(post => ({
+                id: post.id,
+                title: post.title,
+                slug: post.slug,
+                excerpt: post.excerpt || '',
+                content: post.content || '',
+                image: post.image || 'https://picsum.photos/600/400',
+                tags: post.tags || [],
+                readTime: post.read_time || 5,
+                date: new Date(post.created_at).toLocaleDateString('tr-TR', {
+                    day: 'numeric', month: 'long', year: 'numeric'
+                })
+            }));
+
+            setPosts(mappedPosts);
+        } catch (error) {
+            console.error('Error loading posts:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
         if (window.confirm('Bu yazıyı silmek istediğinizden emin misiniz?')) {
-            setPosts(posts.filter(p => p.id !== id));
+            try {
+                const { error } = await supabase.from('posts').delete().eq('id', id);
+                if (error) throw error;
+                setPosts(posts.filter(p => p.id !== id));
+            } catch (error) {
+                console.error('Error deleting post:', error);
+                alert('Silme işlemi başarısız oldu.');
+            }
         }
     };
 
@@ -153,20 +200,57 @@ const PostManager: React.FC = () => {
         setEditorKey(0);
     };
 
-    const handleSave = () => {
-        const newPost: BlogPost = {
-            id: Date.now().toString(),
-            title,
-            slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            excerpt,
-            image: imageUrl || 'https://picsum.photos/600/400',
-            tags: tags.split(',').map(t => t.trim()).filter(t => t),
-            readTime,
-            date: new Date(publishDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
-        };
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const slug = title.toLowerCase()
+                .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
+                .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
+                .replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
-        setPosts([newPost, ...posts]);
-        resetWizard();
+            const newPost = {
+                title,
+                slug,
+                excerpt,
+                content,
+                image: imageUrl || 'https://picsum.photos/600/400',
+                tags: tags.split(',').map(t => t.trim()).filter(t => t),
+                read_time: readTime,
+                is_published: true,
+                created_at: new Date(publishDate).toISOString()
+            };
+
+            const { data, error } = await supabase
+                .from('posts')
+                .insert(newPost)
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            // Add to local state
+            const mappedPost: BlogPost = {
+                id: data.id,
+                title: data.title,
+                slug: data.slug,
+                excerpt: data.excerpt || '',
+                content: data.content || '',
+                image: data.image,
+                tags: data.tags || [],
+                readTime: data.read_time,
+                date: new Date(data.created_at).toLocaleDateString('tr-TR', {
+                    day: 'numeric', month: 'long', year: 'numeric'
+                })
+            };
+
+            setPosts([mappedPost, ...posts]);
+            resetWizard();
+        } catch (error) {
+            console.error('Error saving post:', error);
+            alert('Kaydetme işlemi başarısız oldu.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const applyTemplate = (templateContent: string) => {
@@ -356,10 +440,11 @@ const PostManager: React.FC = () => {
                 <button onClick={() => setWizardStep(1)} className="text-gray-500 font-medium hover:text-gray-800">Geri Dön</button>
                 <button
                     onClick={handleSave}
-                    disabled={!content || content.length < 10}
+                    disabled={!content || content.length < 10 || saving}
                     className="flex items-center gap-2 bg-primary-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-primary-700 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                    <Save size={18} /> Yazıyı Yayınla
+                    {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                    {saving ? 'Kaydediliyor...' : 'Yazıyı Yayınla'}
                 </button>
             </div>
         </div>

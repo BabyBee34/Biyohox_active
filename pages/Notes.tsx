@@ -1,16 +1,49 @@
 
-import React, { useState } from 'react';
-import { FileText, Download, Filter, Search, BookOpen, ChevronRight, Eye, Calendar, Clock, Sparkles, FolderOpen, ArrowDownToLine } from 'lucide-react';
-import { MOCK_RESOURCES, GRADES } from '../constants';
+import React, { useState, useEffect } from 'react';
+import { FileText, Download, Filter, Search, BookOpen, ChevronRight, Eye, Calendar, Clock, Sparkles, FolderOpen, ArrowDownToLine, Loader2 } from 'lucide-react';
+import { GRADES } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { dbService } from '../lib/supabase';
+import { StudyResource } from '../types';
 
 const Notes: React.FC = () => {
     const [selectedGrade, setSelectedGrade] = useState<string>('Tümü');
     const [activeTab, setActiveTab] = useState<'note' | 'pdf'>('note');
     const [searchQuery, setSearchQuery] = useState('');
+    const [resources, setResources] = useState<StudyResource[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const filteredResources = MOCK_RESOURCES.filter(res => {
+    useEffect(() => {
+        loadResources();
+    }, []);
+
+    const loadResources = async () => {
+        try {
+            const data = await dbService.getResources();
+            const mapped: StudyResource[] = (data || []).map((r: any) => ({
+                id: r.id,
+                type: r.type,
+                title: r.title,
+                grade: r.grade || '',
+                unit: r.unit || '',
+                topic: r.topic,
+                content: r.content,
+                fileUrl: r.file_url,
+                size: r.file_size,
+                downloads: r.downloads || 0,
+                views: r.views || 0,
+                date: new Date(r.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+            }));
+            setResources(mapped);
+        } catch (error) {
+            console.error('Error loading resources:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const filteredResources = resources.filter(res => {
         const gradeMatch = selectedGrade === 'Tümü' || res.grade === selectedGrade;
         const typeMatch = res.type === activeTab;
         const searchMatch = res.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -99,8 +132,8 @@ const Notes: React.FC = () => {
                         <button
                             onClick={() => setActiveTab('note')}
                             className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'note'
-                                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
-                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                                ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
                                 }`}
                         >
                             <BookOpen size={18} className={activeTab === 'note' ? 'text-bio-mint-dark' : ''} />
@@ -109,8 +142,8 @@ const Notes: React.FC = () => {
                         <button
                             onClick={() => setActiveTab('pdf')}
                             className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'pdf'
-                                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
-                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                                ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
                                 }`}
                         >
                             <FileText size={18} className={activeTab === 'pdf' ? 'text-red-500' : ''} />
@@ -128,8 +161,8 @@ const Notes: React.FC = () => {
                         <button
                             onClick={() => setSelectedGrade('Tümü')}
                             className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${selectedGrade === 'Tümü'
-                                    ? 'bg-slate-800 text-white border-slate-800 shadow-md'
-                                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                ? 'bg-slate-800 text-white border-slate-800 shadow-md'
+                                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                                 }`}
                         >
                             Tümü
@@ -139,8 +172,8 @@ const Notes: React.FC = () => {
                                 key={g.id}
                                 onClick={() => setSelectedGrade(g.name)}
                                 className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${selectedGrade === g.name
-                                        ? 'bg-bio-mint text-white border-bio-mint shadow-md shadow-bio-mint/20'
-                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                    ? 'bg-bio-mint text-white border-bio-mint shadow-md shadow-bio-mint/20'
+                                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                                     }`}
                             >
                                 {g.name}
@@ -149,118 +182,125 @@ const Notes: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Resources Grid */}
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={activeTab + selectedGrade + searchQuery}
-                        variants={container}
-                        initial="hidden"
-                        animate="show"
-                        className={activeTab === 'note' ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"}
-                    >
-                        {filteredResources.length > 0 ? (
-                            filteredResources.map(res => (
-                                <motion.div key={res.id} variants={item}>
-                                    {activeTab === 'note' ? (
-                                        // --- NOTE CARD DESIGN ---
-                                        <Link to={`/notlar/${res.id}`} className="block h-full">
-                                            <div className="group bg-white rounded-2xl border border-slate-200 p-0 overflow-hidden hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 h-full flex flex-col cursor-pointer">
-                                                <div className="p-6 md:p-8 flex-1 flex flex-col relative">
-                                                    <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-bio-mint to-bio-cyan opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                {/* Loading State */}
+                {loading ? (
+                    <div className="flex justify-center py-20">
+                        <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+                    </div>
+                ) : (
+                    /* Resources Grid */
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={activeTab + selectedGrade + searchQuery}
+                            variants={container}
+                            initial="hidden"
+                            animate="show"
+                            className={activeTab === 'note' ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"}
+                        >
+                            {filteredResources.length > 0 ? (
+                                filteredResources.map(res => (
+                                    <motion.div key={res.id} variants={item}>
+                                        {activeTab === 'note' ? (
+                                            // --- NOTE CARD DESIGN ---
+                                            <Link to={`/notlar/${res.id}`} className="block h-full">
+                                                <div className="group bg-white rounded-2xl border border-slate-200 p-0 overflow-hidden hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 h-full flex flex-col cursor-pointer">
+                                                    <div className="p-6 md:p-8 flex-1 flex flex-col relative">
+                                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-bio-mint to-bio-cyan opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
-                                                    <div className="flex justify-between items-start mb-4">
-                                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider group-hover:bg-bio-mint/10 group-hover:text-bio-mint-dark group-hover:border-bio-mint/20 transition-colors">
-                                                            <FolderOpen size={12} /> {res.unit}
+                                                        <div className="flex justify-between items-start mb-4">
+                                                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider group-hover:bg-bio-mint/10 group-hover:text-bio-mint-dark group-hover:border-bio-mint/20 transition-colors">
+                                                                <FolderOpen size={12} /> {res.unit}
+                                                            </div>
+                                                            <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">{res.grade}</span>
                                                         </div>
-                                                        <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">{res.grade}</span>
+
+                                                        <h3 className="text-xl font-bold font-display text-slate-800 mb-3 group-hover:text-bio-mint-dark transition-colors leading-tight">
+                                                            {res.title}
+                                                        </h3>
+
+                                                        <p className="text-slate-500 text-sm leading-relaxed mb-6 line-clamp-3">
+                                                            {res.content?.replace(/<[^>]+>/g, '').substring(0, 160)}...
+                                                        </p>
+
+                                                        <div className="mt-auto pt-6 border-t border-slate-100 flex items-center justify-between">
+                                                            <div className="flex items-center gap-4 text-xs text-slate-400 font-medium">
+                                                                <span className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-300" /> {res.date}</span>
+                                                                <span className="flex items-center gap-1.5"><Eye size={14} className="text-slate-300" /> {res.views}</span>
+                                                            </div>
+                                                            <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-bio-mint group-hover:text-white transition-all duration-300 shadow-sm">
+                                                                <ChevronRight size={16} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </Link>
+                                        ) : (
+                                            // --- PDF CARD DESIGN ---
+                                            <div className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl hover:shadow-red-500/5 hover:-translate-y-1 hover:border-red-100 transition-all duration-300 h-full flex flex-col relative overflow-hidden cursor-pointer">
+                                                {/* Decorative Background Icon */}
+                                                <FileText className="absolute -bottom-4 -right-4 text-slate-50 w-32 h-32 transform -rotate-12 group-hover:text-red-50 transition-colors duration-300" />
+
+                                                <div className="relative z-10 flex flex-col h-full">
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-500 border border-red-100 shadow-sm group-hover:scale-110 transition-transform duration-300">
+                                                            <span className="font-black text-[10px] uppercase tracking-tighter">PDF</span>
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-1 rounded border border-slate-100">{res.grade}</span>
                                                     </div>
 
-                                                    <h3 className="text-xl font-bold font-display text-slate-800 mb-3 group-hover:text-bio-mint-dark transition-colors leading-tight">
+                                                    <h3 className="text-base font-bold text-slate-800 mb-1 leading-snug group-hover:text-red-600 transition-colors line-clamp-2">
                                                         {res.title}
                                                     </h3>
+                                                    <p className="text-xs text-slate-500 font-medium mb-4">{res.unit}</p>
 
-                                                    <p className="text-slate-500 text-sm leading-relaxed mb-6 line-clamp-3">
-                                                        {res.content?.replace(/<[^>]+>/g, '').substring(0, 160)}...
-                                                    </p>
+                                                    <div className="mt-auto space-y-3">
+                                                        <div className="flex items-center gap-3 text-[10px] text-slate-400 font-medium bg-slate-50/80 p-2 rounded-lg border border-slate-100 backdrop-blur-sm">
+                                                            <span>{res.size}</span>
+                                                            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                                            <span>{res.downloads} İndirme</span>
+                                                            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                                            <span>{res.date}</span>
+                                                        </div>
 
-                                                    <div className="mt-auto pt-6 border-t border-slate-100 flex items-center justify-between">
-                                                        <div className="flex items-center gap-4 text-xs text-slate-400 font-medium">
-                                                            <span className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-300" /> {res.date}</span>
-                                                            <span className="flex items-center gap-1.5"><Eye size={14} className="text-slate-300" /> {res.views}</span>
-                                                        </div>
-                                                        <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-bio-mint group-hover:text-white transition-all duration-300 shadow-sm">
-                                                            <ChevronRight size={16} />
-                                                        </div>
+                                                        <a
+                                                            href={res.fileUrl || '#'}
+                                                            download
+                                                            onClick={(e) => { if (!res.fileUrl) { e.preventDefault(); alert('PDF dosyası henüz yüklenmemiş.'); } }}
+                                                            className="w-full py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 group-hover:bg-red-600 transition-colors shadow-lg shadow-slate-900/10 group-hover:shadow-red-600/20"
+                                                        >
+                                                            <ArrowDownToLine size={14} /> Hemen İndir
+                                                        </a>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </Link>
-                                    ) : (
-                                        // --- PDF CARD DESIGN ---
-                                        <div className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl hover:shadow-red-500/5 hover:-translate-y-1 hover:border-red-100 transition-all duration-300 h-full flex flex-col relative overflow-hidden cursor-pointer">
-                                            {/* Decorative Background Icon */}
-                                            <FileText className="absolute -bottom-4 -right-4 text-slate-50 w-32 h-32 transform -rotate-12 group-hover:text-red-50 transition-colors duration-300" />
-
-                                            <div className="relative z-10 flex flex-col h-full">
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-500 border border-red-100 shadow-sm group-hover:scale-110 transition-transform duration-300">
-                                                        <span className="font-black text-[10px] uppercase tracking-tighter">PDF</span>
-                                                    </div>
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-1 rounded border border-slate-100">{res.grade}</span>
-                                                </div>
-
-                                                <h3 className="text-base font-bold text-slate-800 mb-1 leading-snug group-hover:text-red-600 transition-colors line-clamp-2">
-                                                    {res.title}
-                                                </h3>
-                                                <p className="text-xs text-slate-500 font-medium mb-4">{res.unit}</p>
-
-                                                <div className="mt-auto space-y-3">
-                                                    <div className="flex items-center gap-3 text-[10px] text-slate-400 font-medium bg-slate-50/80 p-2 rounded-lg border border-slate-100 backdrop-blur-sm">
-                                                        <span>{res.size}</span>
-                                                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                                                        <span>{res.downloads} İndirme</span>
-                                                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                                                        <span>{res.date}</span>
-                                                    </div>
-
-                                                    <a
-                                                        href={res.fileUrl || '#'}
-                                                        download
-                                                        onClick={(e) => { if (!res.fileUrl) { e.preventDefault(); alert('PDF dosyası henüz yüklenmemiş.'); } }}
-                                                        className="w-full py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 group-hover:bg-red-600 transition-colors shadow-lg shadow-slate-900/10 group-hover:shadow-red-600/20"
-                                                    >
-                                                        <ArrowDownToLine size={14} /> Hemen İndir
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </motion.div>
-                            ))
-                        ) : (
-                            // --- EMPTY STATE ---
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="col-span-full py-24 text-center"
-                            >
-                                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                                    <Search size={40} className="text-slate-300" />
-                                </div>
-                                <h3 className="text-xl font-bold text-slate-800 mb-2">Sonuç Bulunamadı</h3>
-                                <p className="text-slate-500 max-w-md mx-auto mb-8">
-                                    Aradığınız kriterlere uygun not veya PDF bulunamadı. Lütfen filtreleri değiştirin veya başka bir arama yapın.
-                                </p>
-                                <button
-                                    onClick={() => { setSelectedGrade('Tümü'); setSearchQuery(''); }}
-                                    className="px-6 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                        )}
+                                    </motion.div>
+                                ))
+                            ) : (
+                                // --- EMPTY STATE ---
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="col-span-full py-24 text-center"
                                 >
-                                    Filtreleri Temizle
-                                </button>
-                            </motion.div>
-                        )}
-                    </motion.div>
-                </AnimatePresence>
+                                    <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                        <Search size={40} className="text-slate-300" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-slate-800 mb-2">Sonuç Bulunamadı</h3>
+                                    <p className="text-slate-500 max-w-md mx-auto mb-8">
+                                        Aradığınız kriterlere uygun not veya PDF bulunamadı. Lütfen filtreleri değiştirin veya başka bir arama yapın.
+                                    </p>
+                                    <button
+                                        onClick={() => { setSelectedGrade('Tümü'); setSearchQuery(''); }}
+                                        className="px-6 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                    >
+                                        Filtreleri Temizle
+                                    </button>
+                                </motion.div>
+                            )}
+                        </motion.div>
+                    </AnimatePresence>
+                )}
             </div>
         </div>
     );

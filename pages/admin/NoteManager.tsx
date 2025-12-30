@@ -1,14 +1,15 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import {
     Plus, Trash2, FileText, Download, X, Edit, UploadCloud, Search,
     BookOpen, Check, ArrowRight, LayoutTemplate, Save, ChevronRight,
-    CornerDownRight, Table, List, GitMerge, AlignLeft, Grid
+    CornerDownRight, Table, List, GitMerge, AlignLeft, Grid, Loader2
 } from 'lucide-react';
-import { MOCK_RESOURCES, GRADES, MOCK_UNITS } from '../../constants';
+import { GRADES } from '../../constants';
 import { StudyResource } from '../../types';
 import RichTextEditor from '../../components/RichTextEditor';
+import { dbService } from '../../lib/supabase';
 
 // --- HTML TEMPLATES FOR NOTES ---
 const NOTE_TEMPLATES = [
@@ -51,11 +52,6 @@ const NOTE_TEMPLATES = [
                         <td style="border: 1px solid #e5e7eb; padding: 12px;">...</td>
                         <td style="border: 1px solid #e5e7eb; padding: 12px;">...</td>
                     </tr>
-                    <tr>
-                        <td style="border: 1px solid #e5e7eb; padding: 12px;">Oluşum Yeri</td>
-                        <td style="border: 1px solid #e5e7eb; padding: 12px;">...</td>
-                        <td style="border: 1px solid #e5e7eb; padding: 12px;">...</td>
-                    </tr>
                 </tbody>
             </table>
         `
@@ -70,12 +66,8 @@ const NOTE_TEMPLATES = [
             <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; margin-bottom: 16px;">
                 <strong>1. Başlangıç Evresi:</strong> Reaksiyon burada başlar...
             </div>
-            <p class="mb-4">Ara basamak açıklamaları...</p>
             <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px; margin-bottom: 16px;">
                 <strong>2. Gelişme Evresi:</strong> ATP üretimi gerçekleşir...
-            </div>
-            <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 16px; margin-bottom: 16px;">
-                <strong>3. Sonuç Evresi:</strong> Ürünler serbest kalır...
             </div>
         `
     },
@@ -92,68 +84,65 @@ const NOTE_TEMPLATES = [
                 
                 <dt style="font-weight: bold; color: #15803d; margin-top: 12px;">Terim 2</dt>
                 <dd style="margin-left: 20px; margin-bottom: 8px;">Bu terimin bilimsel açıklaması buraya gelir.</dd>
-                
-                <dt style="font-weight: bold; color: #15803d; margin-top: 12px;">Terim 3</dt>
-                <dd style="margin-left: 20px; margin-bottom: 8px;">Bu terimin bilimsel açıklaması buraya gelir.</dd>
             </dl>
-        `
-    },
-    {
-        id: 'cornell',
-        name: 'Cornell Metodu',
-        icon: <Grid size={20} />,
-        description: 'Soru-cevap ve özet tabanlı not alma.',
-        content: `
-            <table style="width: 100%; border: 1px solid #9ca3af; border-collapse: collapse;">
-                <tr>
-                    <td style="width: 30%; vertical-align: top; border-right: 2px solid #9ca3af; padding: 15px; background-color: #f3f4f6;">
-                        <h4 style="font-weight: bold; margin-bottom: 10px;">Anahtar Sorular</h4>
-                        <ul style="padding-left: 15px; font-size: 0.9em; color: #374151;">
-                            <li>Bu konunun önemi nedir?</li>
-                            <li>Anahtar kavramlar neler?</li>
-                        </ul>
-                    </td>
-                    <td style="width: 70%; vertical-align: top; padding: 15px;">
-                        <h4 style="font-weight: bold; margin-bottom: 10px;">Ders Notları</h4>
-                        <p>Buraya detaylı notlar alınacak...</p>
-                        <p>Madde işaretleri kullanılabilir.</p>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="2" style="border-top: 2px solid #9ca3af; padding: 15px; background-color: #fffbeb;">
-                        <strong style="color: #b45309;">ÖZET:</strong> Bu bölümde konunun 2-3 cümlelik ana fikri yer almalıdır.
-                    </td>
-                </tr>
-            </table>
         `
     }
 ];
 
 const NoteManager: React.FC = () => {
     // --- LIST VIEW STATE ---
-    const [resources, setResources] = useState<StudyResource[]>(MOCK_RESOURCES);
+    const [resources, setResources] = useState<StudyResource[]>([]);
+    const [loading, setLoading] = useState(true);
     const [activeListTab, setActiveListTab] = useState<'note' | 'pdf'>('note');
     const [activeGradeFilter, setActiveGradeFilter] = useState('Tümü');
 
     // --- WIZARD / CREATE STATE ---
     const [isWizardOpen, setIsWizardOpen] = useState(false);
-    const [wizardStep, setWizardStep] = useState(1); // 1: Type, 2: Hierarchy, 3: Content
-    const [editorKey, setEditorKey] = useState(0); // Forces editor re-render on template change
+    const [wizardStep, setWizardStep] = useState(1);
+    const [editorKey, setEditorKey] = useState(0);
+    const [saving, setSaving] = useState(false);
 
     // Wizard Data
     const [newResType, setNewResType] = useState<'note' | 'pdf'>('note');
     const [gradeId, setGradeId] = useState('');
-    const [selectedUnit, setSelectedUnit] = useState(''); // Unit ID
-    const [isNewUnit, setIsNewUnit] = useState(false);
-    const [newUnitTitle, setNewUnitTitle] = useState('');
-    const [selectedTopic, setSelectedTopic] = useState(''); // Topic Title
-    const [isNewTopic, setIsNewTopic] = useState(false);
-    const [newTopicTitle, setNewTopicTitle] = useState('');
+    const [unitTitle, setUnitTitle] = useState('');
+    const [topicTitle, setTopicTitle] = useState('');
 
     // Content Data
     const [title, setTitle] = useState('');
-    const [content, setContent] = useState(''); // HTML for note
-    const [file, setFile] = useState<File | null>(null); // For PDF
+    const [content, setContent] = useState('');
+    const [file, setFile] = useState<File | null>(null);
+
+    // Load resources from database
+    useEffect(() => {
+        loadResources();
+    }, []);
+
+    const loadResources = async () => {
+        try {
+            setLoading(true);
+            const data = await dbService.getResources();
+            const mapped: StudyResource[] = (data || []).map((r: any) => ({
+                id: r.id,
+                type: r.type,
+                title: r.title,
+                grade: r.grade || '',
+                unit: r.unit || '',
+                topic: r.topic,
+                content: r.content,
+                fileUrl: r.file_url,
+                size: r.file_size,
+                downloads: r.downloads || 0,
+                views: r.views || 0,
+                date: new Date(r.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+            }));
+            setResources(mapped);
+        } catch (error) {
+            console.error('Error loading resources:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // --- HELPER FUNCTIONS ---
     const filteredResources = resources.filter(res => {
@@ -162,9 +151,15 @@ const NoteManager: React.FC = () => {
         return typeMatch && gradeMatch;
     });
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('Silmek istediğinizden emin misiniz?')) {
-            setResources(resources.filter(r => r.id !== id));
+            try {
+                await dbService.deleteResource(id);
+                setResources(resources.filter(r => r.id !== id));
+            } catch (error) {
+                console.error('Error deleting resource:', error);
+                alert('Kaynak silinirken bir hata oluştu.');
+            }
         }
     };
 
@@ -173,42 +168,61 @@ const NoteManager: React.FC = () => {
         setWizardStep(1);
         setNewResType('note');
         setGradeId('');
-        setSelectedUnit('');
-        setIsNewUnit(false);
-        setNewUnitTitle('');
-        setSelectedTopic('');
-        setIsNewTopic(false);
-        setNewTopicTitle('');
+        setUnitTitle('');
+        setTopicTitle('');
         setTitle('');
         setContent('');
         setFile(null);
         setEditorKey(0);
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const gradeName = GRADES.find(g => g.id === gradeId)?.name || 'Genel';
-        const unitName = isNewUnit ? newUnitTitle : (MOCK_UNITS.find(u => u.id === selectedUnit)?.title || 'Genel');
 
-        const newResource: StudyResource = {
-            id: Date.now().toString(),
-            type: newResType,
-            title: title,
-            grade: gradeName,
-            unit: unitName,
-            topic: isNewTopic ? newTopicTitle : selectedTopic,
-            content: newResType === 'note' ? content : undefined,
-            size: newResType === 'pdf' ? (file ? (file.size / 1024 / 1024).toFixed(1) + ' MB' : '0 MB') : undefined,
-            downloads: 0,
-            views: 0,
-            date: new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
-        };
+        try {
+            setSaving(true);
+            const newResource = {
+                type: newResType,
+                title: title,
+                grade: gradeName,
+                unit: unitTitle,
+                topic: topicTitle || null,
+                content: newResType === 'note' ? content : null,
+                file_url: newResType === 'pdf' && file ? URL.createObjectURL(file) : null, // In production, upload to storage
+                file_size: newResType === 'pdf' && file ? (file.size / 1024 / 1024).toFixed(1) + ' MB' : null,
+                downloads: 0,
+                views: 0
+            };
 
-        setResources([newResource, ...resources]);
-        resetWizard();
+            const created = await dbService.createResource(newResource);
+
+            // Add to local state
+            const mapped: StudyResource = {
+                id: created.id,
+                type: created.type,
+                title: created.title,
+                grade: created.grade || '',
+                unit: created.unit || '',
+                topic: created.topic,
+                content: created.content,
+                fileUrl: created.file_url,
+                size: created.file_size,
+                downloads: created.downloads || 0,
+                views: created.views || 0,
+                date: new Date(created.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+            };
+
+            setResources([mapped, ...resources]);
+            resetWizard();
+        } catch (error) {
+            console.error('Error saving resource:', error);
+            alert('Kaynak kaydedilirken bir hata oluştu.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const applyTemplate = (templateContent: string) => {
-        // Direct update without confirmation to ensure smooth switching
         setContent(templateContent);
         setEditorKey(prev => prev + 1);
     };
@@ -244,113 +258,65 @@ const NoteManager: React.FC = () => {
         </div>
     );
 
-    const renderStep2Hierarchy = () => {
-        const activeUnits = MOCK_UNITS.filter(u => u.gradeId === gradeId);
-        const activeTopics = activeUnits.find(u => u.id === selectedUnit)?.topics || [];
+    const renderStep2Hierarchy = () => (
+        <div className="space-y-6 animate-in fade-in">
+            <h3 className="text-xl font-bold text-center text-gray-800">Konum Seçimi</h3>
 
-        return (
-            <div className="space-y-6 animate-in fade-in">
-                <h3 className="text-xl font-bold text-center text-gray-800">Konum Seçimi</h3>
-
-                {/* Grade */}
-                <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">1. Sınıf</label>
-                    <div className="grid grid-cols-4 gap-3">
-                        {GRADES.map(g => (
-                            <button
-                                key={g.id}
-                                onClick={() => { setGradeId(g.id); setSelectedUnit(''); setSelectedTopic(''); }}
-                                className={`py-3 px-2 rounded-xl text-sm font-bold border-2 transition-all ${gradeId === g.id ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-gray-300'}`}
-                            >
-                                {g.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Unit */}
-                {gradeId && (
-                    <div className="grid grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">2. Ünite</label>
-                            {isNewUnit ? (
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:border-primary-500"
-                                        placeholder="Yeni Ünite Adı..."
-                                        value={newUnitTitle}
-                                        onChange={(e) => setNewUnitTitle(e.target.value)}
-                                        autoFocus
-                                    />
-                                    <button onClick={() => { setIsNewUnit(false); setNewUnitTitle(''); }} className="text-gray-400 hover:text-red-500"><X /></button>
-                                </div>
-                            ) : (
-                                <select
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:border-primary-500 bg-white"
-                                    value={selectedUnit}
-                                    onChange={(e) => {
-                                        if (e.target.value === 'new') { setIsNewUnit(true); setSelectedUnit(''); }
-                                        else setSelectedUnit(e.target.value);
-                                    }}
-                                >
-                                    <option value="">Seçiniz...</option>
-                                    {activeUnits.map(u => <option key={u.id} value={u.id}>{u.title}</option>)}
-                                    <option value="new" className="font-bold text-primary-600">+ Yeni Ünite Ekle</option>
-                                </select>
-                            )}
-                        </div>
-
-                        {/* Topic */}
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">3. Konu</label>
-                            {isNewTopic ? (
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:border-primary-500"
-                                        placeholder="Yeni Konu Adı..."
-                                        value={newTopicTitle}
-                                        onChange={(e) => setNewTopicTitle(e.target.value)}
-                                        autoFocus
-                                    />
-                                    <button onClick={() => { setIsNewTopic(false); setNewTopicTitle(''); }} className="text-gray-400 hover:text-red-500"><X /></button>
-                                </div>
-                            ) : (
-                                <select
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:border-primary-500 bg-white"
-                                    value={selectedTopic}
-                                    onChange={(e) => {
-                                        if (e.target.value === 'new') { setIsNewTopic(true); setSelectedTopic(''); }
-                                        else setSelectedTopic(e.target.value);
-                                    }}
-                                    disabled={!selectedUnit && !isNewUnit}
-                                >
-                                    <option value="">Seçiniz...</option>
-                                    {activeTopics.map(t => <option key={t.id} value={t.title}>{t.title}</option>)}
-                                    <option value="new" className="font-bold text-primary-600">+ Yeni Konu Ekle</option>
-                                </select>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                <div className="flex justify-end pt-4">
-                    <button
-                        onClick={() => setWizardStep(3)}
-                        disabled={
-                            !gradeId ||
-                            (isNewUnit ? !newUnitTitle.trim() : !selectedUnit) ||
-                            (isNewTopic ? !newTopicTitle.trim() : !selectedTopic)
-                        }
-                        className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Devam Et <ArrowRight size={18} />
-                    </button>
+            {/* Grade */}
+            <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">1. Sınıf</label>
+                <div className="grid grid-cols-4 gap-3">
+                    {GRADES.map(g => (
+                        <button
+                            key={g.id}
+                            onClick={() => setGradeId(g.id)}
+                            className={`py-3 px-2 rounded-xl text-sm font-bold border-2 transition-all ${gradeId === g.id ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-gray-300'}`}
+                        >
+                            {g.name}
+                        </button>
+                    ))}
                 </div>
             </div>
-        );
-    };
+
+            {/* Unit */}
+            {gradeId && (
+                <div className="grid grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">2. Ünite</label>
+                        <input
+                            type="text"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:border-primary-500"
+                            placeholder="Ünite adı..."
+                            value={unitTitle}
+                            onChange={(e) => setUnitTitle(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Topic */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">3. Konu (opsiyonel)</label>
+                        <input
+                            type="text"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:border-primary-500"
+                            placeholder="Konu adı..."
+                            value={topicTitle}
+                            onChange={(e) => setTopicTitle(e.target.value)}
+                        />
+                    </div>
+                </div>
+            )}
+
+            <div className="flex justify-end pt-4">
+                <button
+                    onClick={() => setWizardStep(3)}
+                    disabled={!gradeId || !unitTitle.trim()}
+                    className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Devam Et <ArrowRight size={18} />
+                </button>
+            </div>
+        </div>
+    );
 
     const renderStep3Content = () => (
         <div className="space-y-6 h-full flex flex-col animate-in fade-in">
@@ -425,10 +391,11 @@ const NoteManager: React.FC = () => {
                 <button onClick={() => setWizardStep(2)} className="text-gray-500 font-medium hover:text-gray-800">Geri Dön</button>
                 <button
                     onClick={handleSave}
-                    disabled={!title || (newResType === 'pdf' && !file) || (newResType === 'note' && !content)}
+                    disabled={!title || (newResType === 'pdf' && !file) || (newResType === 'note' && !content) || saving}
                     className="flex items-center gap-2 bg-primary-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-primary-700 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                    <Save size={18} /> {newResType === 'pdf' ? 'PDF Yükle' : 'Notu Kaydet'}
+                    {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                    {newResType === 'pdf' ? 'PDF Yükle' : 'Notu Kaydet'}
                 </button>
             </div>
         </div>
@@ -474,43 +441,56 @@ const NoteManager: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredResources.map(res => (
-                            <div key={res.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative group hover:shadow-md hover:border-primary-200 transition-all duration-300 flex flex-col">
-                                <div className="flex justify-between items-start mb-3">
-                                    <div className={`p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform ${res.type === 'pdf' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                                        {res.type === 'pdf' ? <FileText size={24} /> : <BookOpen size={24} />}
+                    {/* Loading */}
+                    {loading ? (
+                        <div className="flex justify-center py-20">
+                            <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+                        </div>
+                    ) : (
+                        /* Grid */
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {filteredResources.map(res => (
+                                <div key={res.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative group hover:shadow-md hover:border-primary-200 transition-all duration-300 flex flex-col">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className={`p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform ${res.type === 'pdf' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                            {res.type === 'pdf' ? <FileText size={24} /> : <BookOpen size={24} />}
+                                        </div>
+                                        <div className="flex gap-1">
+                                            <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" onClick={() => handleDelete(res.id)}>
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-1">
-                                        <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" onClick={() => handleDelete(res.id)}>
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                </div>
 
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 uppercase tracking-wide">{res.grade}</span>
-                                        <span className="text-gray-300 text-xs">•</span>
-                                        <span className="text-[10px] font-medium text-gray-400 truncate max-w-[100px]">{res.unit}</span>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 uppercase tracking-wide">{res.grade}</span>
+                                            <span className="text-gray-300 text-xs">•</span>
+                                            <span className="text-[10px] font-medium text-gray-400 truncate max-w-[100px]">{res.unit}</span>
+                                        </div>
+                                        <h3 className="font-bold text-gray-800 mb-1 line-clamp-2 leading-snug group-hover:text-primary-600 transition-colors" title={res.title}>{res.title}</h3>
+                                        {res.type === 'note' && <p className="text-xs text-gray-400 mb-4 line-clamp-2">{res.content?.replace(/<[^>]+>/g, '')}</p>}
                                     </div>
-                                    <h3 className="font-bold text-gray-800 mb-1 line-clamp-2 leading-snug group-hover:text-primary-600 transition-colors" title={res.title}>{res.title}</h3>
-                                    {res.type === 'note' && <p className="text-xs text-gray-400 mb-4 line-clamp-2">{res.content?.replace(/<[^>]+>/g, '')}</p>}
-                                </div>
 
-                                <div className="flex items-center justify-between text-xs text-gray-400 border-t border-gray-50 pt-3 mt-2">
-                                    {res.type === 'pdf' ? <span className="font-medium bg-gray-50 px-2 py-1 rounded">{res.size}</span> : <span>HTML İçerik</span>}
-                                    <div className="flex items-center gap-3">
-                                        <span className="flex items-center gap-1">
-                                            {res.type === 'pdf' ? <Download size={14} /> : <ArrowRight size={14} />}
-                                            {res.type === 'pdf' ? res.downloads : 'Oku'}
-                                        </span>
+                                    <div className="flex items-center justify-between text-xs text-gray-400 border-t border-gray-50 pt-3 mt-2">
+                                        {res.type === 'pdf' ? <span className="font-medium bg-gray-50 px-2 py-1 rounded">{res.size}</span> : <span>HTML İçerik</span>}
+                                        <div className="flex items-center gap-3">
+                                            <span className="flex items-center gap-1">
+                                                {res.type === 'pdf' ? <Download size={14} /> : <ArrowRight size={14} />}
+                                                {res.type === 'pdf' ? res.downloads : 'Oku'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+
+                            {filteredResources.length === 0 && (
+                                <div className="col-span-full text-center py-20 text-gray-500">
+                                    {resources.length === 0 ? 'Henüz kaynak eklenmemiş.' : 'Bu filtreye uygun kaynak bulunamadı.'}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </>
             )}
 

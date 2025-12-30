@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronLeft, Menu, Clock, Eye, ArrowLeft, ChevronDown, CheckCircle2, Circle, PlayCircle, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
-import { MOCK_LESSON, MOCK_UNITS, GRADES } from '../constants';
+import { ChevronRight, ChevronLeft, Menu, Clock, Eye, ArrowLeft, ChevronDown, CheckCircle2, Circle, PlayCircle, PanelRightClose, PanelRightOpen, X, Loader2 } from 'lucide-react';
+import { GRADES } from '../constants';
 import QuizComponent from '../components/QuizComponent';
 import FlashcardDeck from '../components/FlashcardDeck';
 import { AnimatePresence, motion } from 'framer-motion';
 import { markLessonComplete, getCompletedLessons, saveLastAccessedLesson } from '../lib/storage';
+import { dbService } from '../lib/supabase';
+import { Unit, Lesson } from '../types';
 
 const LessonDetail: React.FC = () => {
     const { gradeSlug, unitSlug, lessonSlug } = useParams();
@@ -15,12 +17,72 @@ const LessonDetail: React.FC = () => {
     const navigate = useNavigate();
     const [completedLessons, setCompletedLessons] = useState<string[]>([]);
 
-    const lesson = MOCK_LESSON; // Default mock
-    const grade = GRADES.find(g => g.slug === gradeSlug);
-    const currentUnit = MOCK_UNITS.find(u => u.slug === unitSlug);
+    const [lesson, setLesson] = useState<Lesson | null>(null);
+    const [gradeUnits, setGradeUnits] = useState<Unit[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    // Get ALL units for this grade to display in sidebar
-    const gradeUnits = MOCK_UNITS.filter(u => u.gradeId === grade?.id);
+    const grade = GRADES.find(g => g.slug === gradeSlug);
+    const currentUnit = gradeUnits.find(u => u.slug === unitSlug);
+
+    // Load lesson and units from database
+    useEffect(() => {
+        loadData();
+    }, [gradeSlug, lessonSlug]);
+
+    const loadData = async () => {
+        if (!lessonSlug || !grade) return;
+
+        try {
+            setLoading(true);
+            const [lessonData, unitsData] = await Promise.all([
+                dbService.getLessonBySlug(lessonSlug),
+                dbService.getUnitsByGrade(grade.id)
+            ]);
+
+            if (lessonData) {
+                // Map to local Lesson type with blocks
+                const mappedLesson: Lesson = {
+                    id: lessonData.id,
+                    gradeId: lessonData.grade_id || '',
+                    unitId: lessonData.unit_id || '',
+                    title: lessonData.title,
+                    slug: lessonData.slug,
+                    duration: lessonData.duration || 15,
+                    description: lessonData.description || '',
+                    blocks: lessonData.blocks || [],
+                    viewCount: lessonData.view_count || 0
+                };
+                setLesson(mappedLesson);
+            }
+
+            // Map units
+            const mappedUnits: Unit[] = (unitsData || []).map((u: any) => ({
+                id: u.id,
+                gradeId: u.grade_id,
+                title: u.title,
+                slug: u.slug || u.id,
+                topics: (u.topics || []).map((t: any) => ({
+                    id: t.id,
+                    unitId: t.unit_id,
+                    title: t.title,
+                    slug: t.slug || t.id,
+                    lessons: (t.lessons || []).map((l: any) => ({
+                        id: l.id,
+                        topicId: l.topic_id,
+                        title: l.title,
+                        slug: l.slug,
+                        duration: l.duration,
+                        hasQuiz: l.has_quiz
+                    }))
+                }))
+            }));
+            setGradeUnits(mappedUnits);
+        } catch (error) {
+            console.error('Error loading lesson:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // Load progress on mount
     useEffect(() => {
@@ -52,8 +114,7 @@ const LessonDetail: React.FC = () => {
 
     const allLessons: FlatLesson[] = [];
     if (grade) {
-        const units = MOCK_UNITS.filter(u => u.gradeId === grade.id);
-        units.forEach(u => {
+        gradeUnits.forEach(u => {
             u.topics.forEach(t => {
                 t.lessons.forEach(l => {
                     allLessons.push({
@@ -97,7 +158,24 @@ const LessonDetail: React.FC = () => {
         }
     }, [currentUnit]);
 
-    if (!lesson || !grade || !currentUnit) return <div className="p-20 text-center text-slate-500 font-display text-xl">Ders Yükleniyor...</div>;
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50 pt-20">
+                <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+            </div>
+        );
+    }
+
+    if (!lesson || !grade) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 pt-20">
+                <h2 className="text-2xl font-bold text-slate-800 mb-4">Ders Bulunamadı</h2>
+                <button onClick={() => navigate(`/dersler/${gradeSlug}`)} className="text-bio-mint font-bold hover:underline">
+                    Müfredata Dön
+                </button>
+            </div>
+        );
+    }
 
     const toggleUnit = (id: string) => {
         setExpandedUnitIds(prev =>
@@ -231,8 +309,8 @@ const LessonDetail: React.FC = () => {
                             {/* CALLOUT BLOCK */}
                             {block.type === 'callout' && (
                                 <div className={`p-6 rounded-xl border-l-4 my-8 ${block.data?.type === 'warning' ? 'bg-amber-50 border-amber-400 text-amber-900' :
-                                        block.data?.type === 'error' ? 'bg-red-50 border-red-400 text-red-900' :
-                                            'bg-blue-50 border-bio-mint text-slate-800'
+                                    block.data?.type === 'error' ? 'bg-red-50 border-red-400 text-red-900' :
+                                        'bg-blue-50 border-bio-mint text-slate-800'
                                     }`}>
                                     <h4 className="font-bold font-display flex items-center gap-2 mb-2 text-lg">
                                         {block.data?.title || 'Bilgi'}
@@ -391,8 +469,8 @@ const LessonDetail: React.FC = () => {
                                         )}
                                         {block.data?.left?.type === 'callout' && (
                                             <div className={`p-4 rounded-lg border-l-4 ${block.data.left.data?.type === 'warning' ? 'bg-amber-50 border-amber-400 text-amber-900' :
-                                                    block.data.left.data?.type === 'error' ? 'bg-red-50 border-red-400 text-red-900' :
-                                                        'bg-blue-50 border-bio-mint text-slate-800'
+                                                block.data.left.data?.type === 'error' ? 'bg-red-50 border-red-400 text-red-900' :
+                                                    'bg-blue-50 border-bio-mint text-slate-800'
                                                 }`}>
                                                 <h5 className="font-bold mb-1">{block.data.left.data?.title}</h5>
                                                 <p className="text-sm">{block.data.left.data?.text}</p>
@@ -409,8 +487,8 @@ const LessonDetail: React.FC = () => {
                                         )}
                                         {block.data?.right?.type === 'callout' && (
                                             <div className={`p-4 rounded-lg border-l-4 ${block.data.right.data?.type === 'warning' ? 'bg-amber-50 border-amber-400 text-amber-900' :
-                                                    block.data.right.data?.type === 'error' ? 'bg-red-50 border-red-400 text-red-900' :
-                                                        'bg-blue-50 border-bio-mint text-slate-800'
+                                                block.data.right.data?.type === 'error' ? 'bg-red-50 border-red-400 text-red-900' :
+                                                    'bg-blue-50 border-bio-mint text-slate-800'
                                                 }`}>
                                                 <h5 className="font-bold mb-1">{block.data.right.data?.title}</h5>
                                                 <p className="text-sm">{block.data.right.data?.text}</p>
@@ -552,8 +630,8 @@ const LessonDetail: React.FC = () => {
                                                                         <Link
                                                                             to={`/dersler/${gradeSlug}/${u.slug}/${l.slug}`}
                                                                             className={`relative flex items-center gap-2.5 px-3 py-3 rounded-lg text-xs font-medium transition-all duration-300 ${isActive
-                                                                                    ? 'bg-bio-mint/10 text-bio-mint-dark border-l-2 border-bio-mint'
-                                                                                    : 'text-slate-600 hover:bg-slate-100 border-l-2 border-transparent'
+                                                                                ? 'bg-bio-mint/10 text-bio-mint-dark border-l-2 border-bio-mint'
+                                                                                : 'text-slate-600 hover:bg-slate-100 border-l-2 border-transparent'
                                                                                 }`}
                                                                             onClick={() => setSidebarOpen(false)}
                                                                         >

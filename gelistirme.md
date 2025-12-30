@@ -42,8 +42,8 @@ Bu hatalar uygulamanın temel işlevselliğini engelliyor. **Öncelikle düzelti
 
 **Sorun:** Placeholder değerler kullanılıyor:
 ```typescript
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key';
+const SUPABASE_URL = 'https://kgrnvxyjqnbytdpuzyqg.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_9I9Sq18fz05j_d42yh493Q_sCMPalRV';
 ```
 
 **Etki:** Uygulama tamamen mock data ile çalışıyor, hiçbir veri kalıcı değil.

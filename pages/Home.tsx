@@ -1,15 +1,54 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Play, BookOpen, Clock, Zap, FileText, Activity } from 'lucide-react';
-import { GRADES, MOCK_POSTS } from '../constants';
+import { ArrowRight, Play, BookOpen, Clock, Zap, FileText, Activity, Loader2 } from 'lucide-react';
+import { GRADES } from '../constants';
 import GradeCard from '../components/GradeCard';
 import { motion, useScroll, useTransform } from 'framer-motion';
+import { dbService } from '../lib/supabase';
+import { BlogPost } from '../types';
 
 const Home: React.FC = () => {
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 500], [0, 100]);
   const y2 = useTransform(scrollY, [0, 500], [0, -100]);
+
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [stats, setStats] = useState<{ lessonCount: number; resourceCount: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [postsData, statsData] = await Promise.all([
+        dbService.getPosts(),
+        dbService.getStats()
+      ]);
+
+      // Map database fields to BlogPost type
+      const mappedPosts: BlogPost[] = (postsData || []).slice(0, 3).map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        excerpt: p.excerpt || '',
+        content: p.content,
+        image: p.image || 'https://picsum.photos/800/500',
+        tags: p.tags || [],
+        readTime: p.read_time || 5,
+        date: new Date(p.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+      }));
+
+      setPosts(mappedPosts);
+      setStats(statsData);
+    } catch (err) {
+      console.error('Home data load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="overflow-hidden">
@@ -105,9 +144,9 @@ const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
             {[
-              { label: 'Ders İçeriği', value: '120+', icon: BookOpen, color: 'from-bio-mint to-bio-cyan' },
-              { label: 'PDF Doküman', value: '450+', icon: FileText, color: 'from-bio-cyan to-bio-lavender' },
-              { label: 'Aylık Ziyaret', value: '10k+', icon: Activity, color: 'from-bio-pink to-bio-lavender' },
+              { label: 'Ders İçeriği', value: stats?.lessonCount || 0, icon: BookOpen, color: 'from-bio-mint to-bio-cyan' },
+              { label: 'PDF Doküman', value: stats?.resourceCount || 0, icon: FileText, color: 'from-bio-cyan to-bio-lavender' },
+              { label: 'Sınıf Düzeyi', value: '4', icon: Activity, color: 'from-bio-pink to-bio-lavender' },
               { label: 'Ücretsiz Erişim', value: '24/7', icon: Zap, color: 'from-bio-amber to-bio-mint' },
             ].map((stat, i) => (
               <div key={i} className="text-center group">
@@ -137,39 +176,52 @@ const Home: React.FC = () => {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {MOCK_POSTS.map((post, i) => (
-              <Link key={post.id} to={`/ilgincler/${post.id}`} className="group flex flex-col h-full bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-slate-100">
-                <div className="h-56 overflow-hidden relative">
-                  <img src={post.image} alt={post.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
-                  <div className="absolute top-4 left-4 flex gap-2">
-                    {post.tags.slice(0, 2).map(tag => (
-                      <span key={tag} className="px-3 py-1 bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-bold rounded-lg">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="p-8 flex-1 flex flex-col">
-                  <div className="flex items-center gap-3 text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider">
-                    <span className="flex items-center gap-1"><Clock size={14} /> {post.readTime} Dk</span>
-                    <span>•</span>
-                    <span>{post.date}</span>
-                  </div>
-                  <h3 className="text-xl font-bold font-display text-slate-800 mb-3 group-hover:text-bio-mint-dark transition-colors leading-tight">
-                    {post.title}
-                  </h3>
-                  <p className="text-slate-500 text-sm line-clamp-3 mb-6 flex-grow leading-relaxed">
-                    {post.excerpt}
-                  </p>
-                  <div className="flex items-center text-bio-mint font-bold text-sm group-hover:gap-2 transition-all duration-300">
-                    Okumaya Başla <ArrowRight size={16} className="ml-1" />
-                  </div>
-                </div>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+            </div>
+          ) : posts.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
+              <p className="text-slate-500">Henüz blog yazısı eklenmemiş.</p>
+              <Link to="/admin/posts/new" className="text-bio-mint font-medium mt-2 inline-block hover:underline">
+                İlk yazıyı ekle →
               </Link>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {posts.map((post) => (
+                <Link key={post.id} to={`/ilgincler/${post.id}`} className="group flex flex-col h-full bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-slate-100">
+                  <div className="h-56 overflow-hidden relative">
+                    <img src={post.image} alt={post.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
+                    <div className="absolute top-4 left-4 flex gap-2">
+                      {post.tags.slice(0, 2).map(tag => (
+                        <span key={tag} className="px-3 py-1 bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-bold rounded-lg">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="p-8 flex-1 flex flex-col">
+                    <div className="flex items-center gap-3 text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider">
+                      <span className="flex items-center gap-1"><Clock size={14} /> {post.readTime} Dk</span>
+                      <span>•</span>
+                      <span>{post.date}</span>
+                    </div>
+                    <h3 className="text-xl font-bold font-display text-slate-800 mb-3 group-hover:text-bio-mint-dark transition-colors leading-tight">
+                      {post.title}
+                    </h3>
+                    <p className="text-slate-500 text-sm line-clamp-3 mb-6 flex-grow leading-relaxed">
+                      {post.excerpt}
+                    </p>
+                    <div className="flex items-center text-bio-mint font-bold text-sm group-hover:gap-2 transition-all duration-300">
+                      Okumaya Başla <ArrowRight size={16} className="ml-1" />
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
 
           <div className="mt-8 text-center md:hidden">
             <Link to="/ilgincler" className="inline-flex items-center gap-2 text-bio-mint font-bold">

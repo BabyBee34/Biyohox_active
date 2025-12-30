@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { Mail, Send, MessageCircle, Instagram, Twitter, Youtube, HelpCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { dbService } from '../lib/supabase';
 
 const Contact: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -12,20 +14,24 @@ const Contact: React.FC = () => {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
+        setSubmitError(null);
 
-        // Simulate form submission
-        setTimeout(() => {
-            setIsSubmitting(false);
+        try {
+            await dbService.sendContactMessage(formData);
             setSubmitSuccess(true);
             setFormData({ name: '', email: '', subject: 'Genel Soru', message: '' });
-
-            // Reset success message after 5 seconds
             setTimeout(() => setSubmitSuccess(false), 5000);
-        }, 1000);
+        } catch (error: any) {
+            console.error('Contact form error:', error);
+            setSubmitError('Mesaj gönderilemedi. Lütfen daha sonra tekrar deneyin.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -87,16 +93,16 @@ const Contact: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-start gap-4 group hover:border-bio-lavender/50 transition-colors">
+                            <Link to="/sss" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-start gap-4 group hover:border-bio-lavender/50 transition-colors block">
                                 <div className="w-12 h-12 bg-bio-lavender/10 rounded-xl flex items-center justify-center text-bio-lavender-dark group-hover:bg-bio-lavender group-hover:text-white transition-colors">
                                     <HelpCircle size={24} />
                                 </div>
                                 <div>
                                     <h4 className="font-bold text-slate-800 text-lg">Yardım Merkezi</h4>
                                     <p className="text-slate-500 text-sm mb-1">Sıkça sorulan sorulara göz atın</p>
-                                    <span className="text-bio-lavender-dark font-bold text-sm">SSS sayfası yakında eklenecek</span>
+                                    <span className="text-bio-lavender-dark font-bold text-sm">SSS Sayfasına Git →</span>
                                 </div>
-                            </div>
+                            </Link>
                         </div>
 
                         {/* Social Media */}

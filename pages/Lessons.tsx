@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { GRADES, MOCK_UNITS } from '../constants';
+import { GRADES } from '../constants';
 import GradeCard from '../components/GradeCard';
-import { ChevronDown, PlayCircle, ArrowLeft, Book, CheckCircle2, Play, Layers, AlertTriangle, RotateCw, X, Sparkles } from 'lucide-react';
+import { ChevronDown, PlayCircle, ArrowLeft, Book, CheckCircle2, Play, Layers, AlertTriangle, RotateCw, X, Sparkles, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getCompletedLessons, getLastAccessedLesson, LastAccessedLesson } from '../lib/storage';
+import { dbService } from '../lib/supabase';
+import { Unit } from '../types';
 
 const Lessons: React.FC = () => {
     const { gradeSlug } = useParams<{ gradeSlug: string }>();
@@ -14,6 +16,9 @@ const Lessons: React.FC = () => {
     const [expandedUnitIds, setExpandedUnitIds] = useState<string[]>(['u1']);
     const [completedLessons, setCompletedLessons] = useState<string[]>([]);
     const [lastAccessed, setLastAccessed] = useState<LastAccessedLesson | null>(null);
+    const [units, setUnits] = useState<Unit[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [gradeCounts, setGradeCounts] = useState<{ [gradeId: string]: { unitCount: number; lessonCount: number } }>({});
     const [showSessionAlert, setShowSessionAlert] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('hideSessionAlert') !== 'true';
@@ -21,8 +26,23 @@ const Lessons: React.FC = () => {
         return true;
     });
 
+    // Load grade counts on mount (for grade selection screen)
+    useEffect(() => {
+        loadGradeCounts();
+    }, []);
+
+    const loadGradeCounts = async () => {
+        try {
+            const counts = await dbService.getGradeCounts();
+            setGradeCounts(counts);
+        } catch (error) {
+            console.error('Error loading grade counts:', error);
+        }
+    };
+
     useEffect(() => {
         if (gradeSlug) {
+            loadUnits();
             setCompletedLessons(getCompletedLessons());
             setLastAccessed(getLastAccessedLesson(gradeSlug));
 
@@ -36,6 +56,42 @@ const Lessons: React.FC = () => {
             return () => window.removeEventListener('lesson-progress-updated', handleStorageChange);
         }
     }, [gradeSlug]);
+
+    const loadUnits = async () => {
+        const grade = GRADES.find(g => g.slug === gradeSlug);
+        if (!grade) return;
+
+        try {
+            setLoading(true);
+            const data = await dbService.getUnitsByGrade(grade.id);
+            // Map to local Unit type
+            const mapped: Unit[] = (data || []).map((u: any) => ({
+                id: u.id,
+                gradeId: u.grade_id,
+                title: u.title,
+                slug: u.slug || u.id,
+                topics: (u.topics || []).map((t: any) => ({
+                    id: t.id,
+                    unitId: t.unit_id,
+                    title: t.title,
+                    slug: t.slug || t.id,
+                    lessons: (t.lessons || []).map((l: any) => ({
+                        id: l.id,
+                        topicId: l.topic_id,
+                        title: l.title,
+                        slug: l.slug,
+                        duration: l.duration,
+                        hasQuiz: l.has_quiz
+                    }))
+                }))
+            }));
+            setUnits(mapped);
+        } catch (error) {
+            console.error('Error loading units:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // If no grade is selected, show grade selection screen
     if (!gradeSlug) {
@@ -80,9 +136,11 @@ const Lessons: React.FC = () => {
                         transition={{ duration: 0.6, delay: 0.2 }}
                         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
                     >
-                        {GRADES.map((grade, index) => (
-                            <GradeCard key={grade.id} grade={grade} index={index} uniform={true} />
-                        ))}
+                        {GRADES.map((grade, index) => {
+                            const counts = gradeCounts[grade.id] || { unitCount: 0, lessonCount: 0 };
+                            const gradeWithCounts = { ...grade, unitCount: counts.unitCount, lessonCount: counts.lessonCount };
+                            return <GradeCard key={grade.id} grade={gradeWithCounts} index={index} uniform={true} />;
+                        })}
                     </motion.div>
                 </div>
             </div>
@@ -91,7 +149,6 @@ const Lessons: React.FC = () => {
 
     // LOGIC FOR GRADE VIEW
     const grade = GRADES.find(g => g.slug === gradeSlug);
-    const units = MOCK_UNITS.filter(u => u.gradeId === grade?.id);
 
     if (!grade) return <div className="p-20 text-center text-xl text-slate-400">Aradığınız sınıf bulunamadı.</div>;
 
@@ -162,17 +219,19 @@ const Lessons: React.FC = () => {
                         <div className="flex flex-wrap justify-center gap-4 md:gap-8 text-sm font-medium text-slate-500 mb-10">
                             <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-slate-200 shadow-sm">
                                 <Layers size={18} className="text-bio-mint" />
-                                <span>{grade.unitCount} Ünite</span>
+                                <span>{units.length} Ünite</span>
                             </div>
                             <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-slate-200 shadow-sm">
                                 <PlayCircle size={18} className="text-bio-lavender" />
-                                <span>{grade.lessonCount} Ders</span>
+                                <span>{totalLessons} Ders</span>
                             </div>
                         </div>
 
                         {/* Main Action */}
                         <div className="flex justify-center">
-                            {lastAccessed ? (
+                            {loading ? (
+                                <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+                            ) : lastAccessed ? (
                                 <Link
                                     to={`/dersler/${grade.slug}/${lastAccessed.unitSlug}/${lastAccessed.lessonSlug}`}
                                     className="group relative inline-flex items-center gap-3 px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-xl shadow-bio-mint/20 hover:scale-105 transition-all duration-300 overflow-hidden text-left"
@@ -258,115 +317,129 @@ const Lessons: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Units Accordion */}
-                <div className="space-y-4">
-                    {units.map((unit, index) => {
-                        const isOpen = expandedUnitIds.includes(unit.id);
-                        const totalLessonsInUnit = unit.topics.reduce((acc, t) => acc + t.lessons.length, 0);
+                {/* Loading State */}
+                {loading ? (
+                    <div className="flex justify-center py-20">
+                        <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+                    </div>
+                ) : units.length === 0 ? (
+                    <div className="text-center py-20 bg-white rounded-2xl border border-slate-200">
+                        <p className="text-slate-500 text-lg">Bu sınıf için henüz ünite eklenmemiş.</p>
+                        <Link to="/admin/lessons" className="text-bio-mint font-bold mt-4 inline-block hover:underline">
+                            Admin panelinden ünite ekle →
+                        </Link>
+                    </div>
+                ) : (
+                    /* Units Accordion */
+                    <div className="space-y-4">
+                        {units.map((unit, index) => {
+                            const isOpen = expandedUnitIds.includes(unit.id);
+                            const totalLessonsInUnit = unit.topics.reduce((acc, t) => acc + t.lessons.length, 0);
 
-                        return (
-                            <div
-                                key={unit.id}
-                                className={`group bg-white border transition-all duration-300 overflow-hidden ${isOpen ? 'rounded-3xl border-bio-mint/30 shadow-lg shadow-bio-mint/5' : 'rounded-2xl border-slate-200 hover:border-bio-mint/20 shadow-sm hover:shadow-md'}`}
-                            >
-                                {/* Accordion Header */}
-                                <button
-                                    onClick={() => toggleUnit(unit.id)}
-                                    className="w-full flex items-center justify-between p-6 text-left focus:outline-none"
+                            return (
+                                <div
+                                    key={unit.id}
+                                    className={`group bg-white border transition-all duration-300 overflow-hidden ${isOpen ? 'rounded-3xl border-bio-mint/30 shadow-lg shadow-bio-mint/5' : 'rounded-2xl border-slate-200 hover:border-bio-mint/20 shadow-sm hover:shadow-md'}`}
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold font-display transition-colors ${isOpen ? 'bg-bio-mint text-white shadow-lg shadow-bio-mint/30' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
-                                            {index + 1}
+                                    {/* Accordion Header */}
+                                    <button
+                                        onClick={() => toggleUnit(unit.id)}
+                                        className="w-full flex items-center justify-between p-6 text-left focus:outline-none"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold font-display transition-colors ${isOpen ? 'bg-bio-mint text-white shadow-lg shadow-bio-mint/30' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
+                                                {index + 1}
+                                            </div>
+                                            <div>
+                                                <h2 className={`text-lg font-bold font-display transition-colors ${isOpen ? 'text-slate-900' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                                                    {unit.title}
+                                                </h2>
+                                                <p className="text-xs text-slate-500 flex items-center gap-2 mt-1">
+                                                    <span>{unit.topics.length} Konu</span>
+                                                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                                    <span>{totalLessonsInUnit} Ders</span>
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h2 className={`text-lg font-bold font-display transition-colors ${isOpen ? 'text-slate-900' : 'text-slate-700 group-hover:text-slate-900'}`}>
-                                                {unit.title}
-                                            </h2>
-                                            <p className="text-xs text-slate-500 flex items-center gap-2 mt-1">
-                                                <span>{unit.topics.length} Konu</span>
-                                                <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                                                <span>{totalLessonsInUnit} Ders</span>
-                                            </p>
+                                        <div className={`p-2 rounded-full transition-all duration-300 ${isOpen ? 'bg-slate-100 rotate-180 text-slate-900' : 'text-slate-400 group-hover:bg-slate-50'}`}>
+                                            <ChevronDown size={20} />
                                         </div>
-                                    </div>
-                                    <div className={`p-2 rounded-full transition-all duration-300 ${isOpen ? 'bg-slate-100 rotate-180 text-slate-900' : 'text-slate-400 group-hover:bg-slate-50'}`}>
-                                        <ChevronDown size={20} />
-                                    </div>
-                                </button>
+                                    </button>
 
-                                {/* Accordion Body */}
-                                <AnimatePresence>
-                                    {isOpen && (
-                                        <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: 'auto', opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            transition={{ duration: 0.3, ease: "easeInOut" }}
-                                        >
-                                            <div className="px-6 pb-8 pt-2 border-t border-slate-100 bg-slate-50/50">
-                                                {unit.topics.map((topic, topicIndex) => (
-                                                    <div key={topic.id} className="mt-8 first:mt-4">
-                                                        {/* Topic Header - Bold & Distinct */}
-                                                        <div className="flex items-center gap-3 mb-4 px-2">
-                                                            <div className="w-8 h-8 rounded-lg bg-bio-mint/10 flex items-center justify-center text-bio-mint-dark shrink-0">
-                                                                <Layers size={16} />
+                                    {/* Accordion Body */}
+                                    <AnimatePresence>
+                                        {isOpen && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.3, ease: "easeInOut" }}
+                                            >
+                                                <div className="px-6 pb-8 pt-2 border-t border-slate-100 bg-slate-50/50">
+                                                    {unit.topics.map((topic, topicIndex) => (
+                                                        <div key={topic.id} className="mt-8 first:mt-4">
+                                                            {/* Topic Header - Bold & Distinct */}
+                                                            <div className="flex items-center gap-3 mb-4 px-2">
+                                                                <div className="w-8 h-8 rounded-lg bg-bio-mint/10 flex items-center justify-center text-bio-mint-dark shrink-0">
+                                                                    <Layers size={16} />
+                                                                </div>
+                                                                <h3 className="text-lg font-bold font-display text-slate-800 tracking-tight">
+                                                                    {topic.title}
+                                                                </h3>
+                                                                <div className="h-px bg-slate-200 flex-1 ml-2"></div>
                                                             </div>
-                                                            <h3 className="text-lg font-bold font-display text-slate-800 tracking-tight">
-                                                                {topic.title}
-                                                            </h3>
-                                                            <div className="h-px bg-slate-200 flex-1 ml-2"></div>
-                                                        </div>
 
-                                                        <div className="space-y-3 pl-3 md:pl-11">
-                                                            {topic.lessons.map((lesson, lessonIndex) => {
-                                                                const isCompleted = completedLessons.includes(lesson.slug);
-                                                                // Check if this is the last accessed lesson
-                                                                const isLastAccessed = lastAccessed?.lessonSlug === lesson.slug;
+                                                            <div className="space-y-3 pl-3 md:pl-11">
+                                                                {topic.lessons.map((lesson, lessonIndex) => {
+                                                                    const isCompleted = completedLessons.includes(lesson.slug);
+                                                                    // Check if this is the last accessed lesson
+                                                                    const isLastAccessed = lastAccessed?.lessonSlug === lesson.slug;
 
-                                                                return (
-                                                                    <Link
-                                                                        key={lesson.id}
-                                                                        to={`/dersler/${grade.slug}/${unit.slug}/${lesson.slug}`}
-                                                                        className={`flex items-center justify-between p-4 border rounded-xl hover:shadow-md hover:translate-x-1 transition-all group/lesson ${isLastAccessed
-                                                                            ? 'bg-bio-mint/5 border-bio-mint/50 shadow-md ring-1 ring-bio-mint/20'
-                                                                            : 'bg-white border-slate-100 hover:border-bio-mint/40'
-                                                                            }`}
-                                                                    >
-                                                                        <div className="flex items-center gap-4">
-                                                                            <div className={`p-2 rounded-full transition-colors ${isCompleted ? 'bg-emerald-100 text-emerald-600' :
-                                                                                isLastAccessed ? 'bg-bio-mint text-white' :
-                                                                                    'bg-slate-50 text-slate-400 group-hover/lesson:bg-bio-mint/10 group-hover/lesson:text-bio-mint'
-                                                                                }`}>
-                                                                                {isCompleted ? <CheckCircle2 size={20} /> : <PlayCircle size={20} />}
+                                                                    return (
+                                                                        <Link
+                                                                            key={lesson.id}
+                                                                            to={`/dersler/${grade.slug}/${unit.slug}/${lesson.slug}`}
+                                                                            className={`flex items-center justify-between p-4 border rounded-xl hover:shadow-md hover:translate-x-1 transition-all group/lesson ${isLastAccessed
+                                                                                ? 'bg-bio-mint/5 border-bio-mint/50 shadow-md ring-1 ring-bio-mint/20'
+                                                                                : 'bg-white border-slate-100 hover:border-bio-mint/40'
+                                                                                }`}
+                                                                        >
+                                                                            <div className="flex items-center gap-4">
+                                                                                <div className={`p-2 rounded-full transition-colors ${isCompleted ? 'bg-emerald-100 text-emerald-600' :
+                                                                                    isLastAccessed ? 'bg-bio-mint text-white' :
+                                                                                        'bg-slate-50 text-slate-400 group-hover/lesson:bg-bio-mint/10 group-hover/lesson:text-bio-mint'
+                                                                                    }`}>
+                                                                                    {isCompleted ? <CheckCircle2 size={20} /> : <PlayCircle size={20} />}
+                                                                                </div>
+                                                                                <div className="flex flex-col">
+                                                                                    <span className={`text-sm font-bold ${isCompleted ? 'text-slate-500 line-through decoration-slate-300' : 'text-slate-700 group-hover/lesson:text-slate-900'}`}>
+                                                                                        {lesson.title}
+                                                                                    </span>
+                                                                                    {isLastAccessed && !isCompleted && (
+                                                                                        <span className="text-[10px] text-bio-mint-dark font-bold uppercase tracking-wide">Son Görüntülenen</span>
+                                                                                    )}
+                                                                                </div>
                                                                             </div>
-                                                                            <div className="flex flex-col">
-                                                                                <span className={`text-sm font-bold ${isCompleted ? 'text-slate-500 line-through decoration-slate-300' : 'text-slate-700 group-hover/lesson:text-slate-900'}`}>
-                                                                                    {lesson.title}
-                                                                                </span>
-                                                                                {isLastAccessed && !isCompleted && (
-                                                                                    <span className="text-[10px] text-bio-mint-dark font-bold uppercase tracking-wide">Son Görüntülenen</span>
+                                                                            <div className="flex items-center gap-4">
+                                                                                {isCompleted && (
+                                                                                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Tamamlandı</span>
                                                                                 )}
                                                                             </div>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-4">
-                                                                            {isCompleted && (
-                                                                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Tamamlandı</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </Link>
-                                                                );
-                                                            })}
+                                                                        </Link>
+                                                                    );
+                                                                })}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        );
-                    })}
-                </div>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

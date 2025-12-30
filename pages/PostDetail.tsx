@@ -1,29 +1,83 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { MOCK_POSTS } from '../constants';
-import { ArrowLeft, Calendar, Clock, Share2, Bookmark, Tag, ChevronRight, User } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Share2, Bookmark, Tag, ChevronRight, User, Loader2 } from 'lucide-react';
 import { motion, useScroll, useSpring } from 'framer-motion';
+import { dbService } from '../lib/supabase';
+import { BlogPost } from '../types';
 
 const PostDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
 
-    const post = MOCK_POSTS.find(p => p.id === id);
+    const [post, setPost] = useState<BlogPost | null>(null);
+    const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([]);
+    const [loading, setLoading] = useState(true);
 
     // Scroll progress tracking
     const { scrollYProgress } = useScroll();
     const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
 
-    // Find related posts (exclude current)
-    const relatedPosts = MOCK_POSTS
-        .filter(p => p.id !== id)
-        .slice(0, 3);
-
-    // Scroll to top on mount
     useEffect(() => {
+        loadPost();
         window.scrollTo(0, 0);
     }, [id]);
+
+    const loadPost = async () => {
+        if (!id) return;
+        try {
+            setLoading(true);
+            const data = await dbService.getPostById(id);
+            if (data) {
+                const mappedPost: BlogPost = {
+                    id: data.id,
+                    title: data.title,
+                    slug: data.slug,
+                    excerpt: data.excerpt || '',
+                    content: data.content || '',
+                    image: data.image || 'https://picsum.photos/800/500',
+                    tags: data.tags || [],
+                    readTime: data.read_time || 5,
+                    date: new Date(data.created_at).toLocaleDateString('tr-TR', {
+                        day: 'numeric', month: 'long', year: 'numeric'
+                    })
+                };
+                setPost(mappedPost);
+
+                // Load related posts
+                const allPosts = await dbService.getPosts();
+                const related = (allPosts || [])
+                    .filter((p: any) => p.id !== id)
+                    .slice(0, 3)
+                    .map((p: any) => ({
+                        id: p.id,
+                        title: p.title,
+                        slug: p.slug,
+                        excerpt: p.excerpt || '',
+                        content: p.content || '',
+                        image: p.image || 'https://picsum.photos/600/400',
+                        tags: p.tags || [],
+                        readTime: p.read_time || 5,
+                        date: new Date(p.created_at).toLocaleDateString('tr-TR', {
+                            day: 'numeric', month: 'long', year: 'numeric'
+                        })
+                    }));
+                setRelatedPosts(related);
+            }
+        } catch (error) {
+            console.error('Error loading post:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+            </div>
+        );
+    }
 
     if (!post) {
         return (
@@ -138,29 +192,31 @@ const PostDetail: React.FC = () => {
                         </div>
 
                         {/* Related Posts */}
-                        <div className="mt-16 pt-12 border-t border-slate-200">
-                            <h3 className="text-2xl font-bold font-display text-slate-900 mb-8">Bunlar da İlginizi Çekebilir</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                {relatedPosts.map(related => (
-                                    <Link key={related.id} to={`/ilgincler/${related.id}`} className="group flex gap-4 items-start">
-                                        <div className="w-24 h-24 rounded-xl overflow-hidden shrink-0">
-                                            <img src={related.image} alt={related.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                        </div>
-                                        <div>
-                                            <div className="flex gap-2 mb-1.5">
-                                                {related.tags.slice(0, 1).map(tag => (
-                                                    <span key={tag} className="text-[10px] font-bold text-bio-mint-dark uppercase tracking-wide">{tag}</span>
-                                                ))}
+                        {relatedPosts.length > 0 && (
+                            <div className="mt-16 pt-12 border-t border-slate-200">
+                                <h3 className="text-2xl font-bold font-display text-slate-900 mb-8">Bunlar da İlginizi Çekebilir</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    {relatedPosts.map(related => (
+                                        <Link key={related.id} to={`/ilgincler/${related.id}`} className="group flex gap-4 items-start">
+                                            <div className="w-24 h-24 rounded-xl overflow-hidden shrink-0">
+                                                <img src={related.image} alt={related.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                             </div>
-                                            <h4 className="font-bold text-slate-800 leading-snug mb-1 group-hover:text-bio-mint-dark transition-colors line-clamp-2">
-                                                {related.title}
-                                            </h4>
-                                            <span className="text-xs text-slate-400">{related.readTime} dk okuma</span>
-                                        </div>
-                                    </Link>
-                                ))}
+                                            <div>
+                                                <div className="flex gap-2 mb-1.5">
+                                                    {related.tags.slice(0, 1).map(tag => (
+                                                        <span key={tag} className="text-[10px] font-bold text-bio-mint-dark uppercase tracking-wide">{tag}</span>
+                                                    ))}
+                                                </div>
+                                                <h4 className="font-bold text-slate-800 leading-snug mb-1 group-hover:text-bio-mint-dark transition-colors line-clamp-2">
+                                                    {related.title}
+                                                </h4>
+                                                <span className="text-xs text-slate-400">{related.readTime} dk okuma</span>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
 
                     <div className="col-span-1"></div>

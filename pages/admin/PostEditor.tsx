@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     Save, ArrowLeft, Image as ImageIcon, Tag, AlignLeft,
-    Calendar, Eye, EyeOff, Settings, X, Globe, Clock, CheckCircle
+    Calendar, Eye, EyeOff, Settings, X, Globe, Clock, CheckCircle, Loader2
 } from 'lucide-react';
-import { MOCK_POSTS } from '../../constants';
 import RichTextEditor from '../../components/RichTextEditor';
+import { dbService } from '../../lib/supabase';
 
 const PostEditor: React.FC = () => {
     const navigate = useNavigate();
@@ -15,6 +15,8 @@ const PostEditor: React.FC = () => {
     // UI States
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
 
     // Content States
     const [title, setTitle] = useState('');
@@ -28,21 +30,32 @@ const PostEditor: React.FC = () => {
     const [isPublished, setIsPublished] = useState(false);
 
     useEffect(() => {
-        if (isEditMode) {
-            const post = MOCK_POSTS.find(p => p.id === id);
+        if (isEditMode && id) {
+            loadPost(id);
+        }
+    }, [isEditMode, id]);
+
+    const loadPost = async (postId: string) => {
+        try {
+            setLoading(true);
+            const post = await dbService.getPostById(postId);
             if (post) {
                 setTitle(post.title);
                 setSlug(post.slug);
-                setExcerpt(post.excerpt);
-                setImageUrl(post.image);
-                setTags(post.tags.join(', '));
-                setReadTime(post.readTime);
-                setPublishDate(post.date); // In real app, parse date correctly
-                setContent('<p>Bu alan veritabanından gelen zengin içeriktir...</p><h2>Alt Başlık Örneği</h2><p>İçerik devam ediyor...</p>');
-                setIsPublished(true);
+                setExcerpt(post.excerpt || '');
+                setImageUrl(post.image || '');
+                setTags((post.tags || []).join(', '));
+                setReadTime(post.read_time || 5);
+                setPublishDate(post.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]);
+                setContent(post.content || '');
+                setIsPublished(post.is_published || false);
             }
+        } catch (error) {
+            console.error('Error loading post:', error);
+        } finally {
+            setLoading(false);
         }
-    }, [isEditMode, id]);
+    };
 
     // Auto-generate slug from title
     useEffect(() => {
@@ -51,14 +64,46 @@ const PostEditor: React.FC = () => {
         }
     }, [title, isEditMode]);
 
-    const handleSave = () => {
-        console.log({ title, slug, excerpt, content, imageUrl, tags, isPublished });
-        alert('Yazı başarıyla kaydedildi!');
-        navigate('/admin/posts');
+    const handleSave = async () => {
+        try {
+            setSaving(true);
+            const postData = {
+                title,
+                slug,
+                excerpt,
+                content,
+                image: imageUrl,
+                tags: tags.split(',').map(t => t.trim()).filter(t => t),
+                read_time: readTime,
+                is_published: isPublished
+            };
+
+            if (isEditMode && id) {
+                await dbService.updatePost(id, postData);
+            } else {
+                await dbService.createPost(postData);
+            }
+
+            alert('Yazı başarıyla kaydedildi!');
+            navigate('/admin/posts');
+        } catch (error) {
+            console.error('Error saving post:', error);
+            alert('Kaydetme sırasında bir hata oluştu.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancel = () => {
         navigate('/admin/posts');
+    }
+
+    if (loading) {
+        return (
+            <div className="h-screen flex items-center justify-center bg-gray-50">
+                <Loader2 className="w-8 h-8 animate-spin text-bio-mint" />
+            </div>
+        );
     }
 
     // --- PREVIEW COMPONENT ---
@@ -138,9 +183,10 @@ const PostEditor: React.FC = () => {
                     </button>
                     <button
                         onClick={handleSave}
-                        className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 shadow-lg shadow-primary-200 transition-all"
+                        disabled={saving}
+                        className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 shadow-lg shadow-primary-200 transition-all disabled:opacity-50"
                     >
-                        <Save size={18} /> Kaydet
+                        {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Kaydet
                     </button>
                 </div>
             </header>
