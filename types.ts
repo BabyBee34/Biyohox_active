@@ -6,6 +6,8 @@ export interface Grade {
   unitCount: number;
   lessonCount: number;
   color: string;
+  icon?: string;
+  description?: string;
 }
 
 export interface QuizQuestion {

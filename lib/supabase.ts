@@ -296,5 +296,187 @@ export const dbService = {
             .order('order_index');
         if (error) throw error;
         return data;
+    },
+
+    // ===============================
+    // QUESTIONS (SORULAR)
+    // ===============================
+
+    async getQuestionCounts() {
+        const { data, error } = await supabase
+            .from('questions')
+            .select('grade_id')
+            .eq('is_published', true);
+
+        if (error) throw error;
+
+        const counts: Record<string, { questionCount: number; solutionCount: number }> = {};
+        (data || []).forEach((q: any) => {
+            if (!counts[q.grade_id]) {
+                counts[q.grade_id] = { questionCount: 0, solutionCount: 0 };
+            }
+            counts[q.grade_id].questionCount++;
+        });
+
+        return counts;
+    },
+
+    async getQuestions(gradeId?: string) {
+        let query = supabase
+            .from('questions')
+            .select('*')
+            .eq('is_published', true)
+            .order('created_at', { ascending: false });
+
+        if (gradeId) {
+            query = query.eq('grade_id', gradeId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data;
+    },
+
+    async getQuestionsByTopic(topicId: string) {
+        const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('topic_id', topicId)
+            .eq('is_published', true)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data;
+    },
+
+    async getQuestionById(id: string) {
+        const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
+    async getAllQuestions() {
+        const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data;
+    },
+
+    async createQuestion(question: any) {
+        const { data, error } = await supabase.from('questions').insert([question]).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    async updateQuestion(id: string, updates: any) {
+        const { data, error } = await supabase.from('questions').update(updates).eq('id', id).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    async deleteQuestion(id: string) {
+        const { error } = await supabase.from('questions').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    // ===============================
+    // SOLUTIONS (ÇÖZÜMLER)
+    // ===============================
+
+    async getSolutions(gradeId?: string) {
+        let query = supabase
+            .from('question_solutions')
+            .select('*')
+            .eq('is_published', true)
+            .order('created_at', { ascending: false });
+
+        if (gradeId) {
+            query = query.eq('grade_id', gradeId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data;
+    },
+
+    async getSolutionsByTopic(topicId: string) {
+        const { data, error } = await supabase
+            .from('question_solutions')
+            .select('*')
+            .eq('topic_id', topicId)
+            .eq('is_published', true)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data;
+    },
+
+    async getSolutionById(id: string) {
+        const { data, error } = await supabase
+            .from('question_solutions')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
+    async getAllSolutions() {
+        const { data, error } = await supabase
+            .from('question_solutions')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data;
+    },
+
+    async createSolution(solution: any) {
+        const { data, error } = await supabase.from('question_solutions').insert([solution]).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    async updateSolution(id: string, updates: any) {
+        const { data, error } = await supabase.from('question_solutions').update(updates).eq('id', id).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    async deleteSolution(id: string) {
+        const { error } = await supabase.from('question_solutions').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    // ===============================
+    // USER PROGRESS TRACKING
+    // ===============================
+
+    async trackQuestionProgress(progress: {
+        question_id: string;
+        user_answer: string;
+        is_correct: boolean;
+        time_spent: number;
+    }) {
+        const sessionId = sessionStorage.getItem('biyohox_session_id') ||
+            (() => {
+                const id = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                sessionStorage.setItem('biyohox_session_id', id);
+                return id;
+            })();
+
+        const { error } = await supabase.from('user_question_progress').insert([{
+            session_id: sessionId,
+            ...progress
+        }]);
+
+        if (error) console.error('Progress tracking error:', error);
     }
 };

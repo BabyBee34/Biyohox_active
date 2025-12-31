@@ -3,7 +3,7 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Book, FileText, Lightbulb, LogOut, Settings,
-  Dna, Image, Activity, Bell, User, ExternalLink, Mail
+  Dna, Image, Activity, Bell, User, ExternalLink, Mail, HelpCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -33,6 +33,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, title, action }) =>
       label: 'İçerik Yönetimi',
       items: [
         { path: '/admin/lessons', icon: <Book size={20} />, label: 'Dersler' },
+        { path: '/admin/questions', icon: <HelpCircle size={20} />, label: 'Sorular' },
         { path: '/admin/notes', icon: <FileText size={20} />, label: 'Notlar & PDF' },
         { path: '/admin/posts', icon: <Lightbulb size={20} />, label: 'İlginç Bilgiler' },
       ]

@@ -26,6 +26,11 @@ const NoteManager = lazy(() => import('./pages/admin/NoteManager'));
 const PostManager = lazy(() => import('./pages/admin/PostManager'));
 const PostEditor = lazy(() => import('./pages/admin/PostEditor'));
 const MessageManager = lazy(() => import('./pages/admin/MessageManager'));
+const Questions = lazy(() => import('./pages/Questions'));
+const QuestionDetail = lazy(() => import('./pages/QuestionDetail'));
+const SolutionDetail = lazy(() => import('./pages/SolutionDetail'));
+
+const QuestionManager = lazy(() => import('./pages/admin/QuestionManager'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -234,6 +239,8 @@ const App: React.FC = () => {
               <Route path="/admin/lessons/new" element={<ProtectedRoute><LessonBuilder /></ProtectedRoute>} />
               <Route path="/admin/lessons/:id/edit" element={<ProtectedRoute><LessonBuilder /></ProtectedRoute>} />
 
+              <Route path="/admin/questions" element={<ProtectedRoute><QuestionManager /></ProtectedRoute>} />
+
               <Route path="/admin/notes" element={<ProtectedRoute><NoteManager /></ProtectedRoute>} />
 
               <Route path="/admin/posts" element={<ProtectedRoute><PostManager /></ProtectedRoute>} />
@@ -254,6 +261,10 @@ const App: React.FC = () => {
                       <Route path="/dersler" element={<Lessons />} />
                       <Route path="/dersler/:gradeSlug" element={<Lessons />} />
                       <Route path="/dersler/:gradeSlug/:unitSlug/:lessonSlug" element={<LessonDetail />} />
+                      <Route path="/sorular" element={<Questions />} />
+                      <Route path="/sorular/:gradeSlug" element={<Questions />} />
+                      <Route path="/sorular/soru/:questionId" element={<QuestionDetail />} />
+                      <Route path="/sorular/cozum/:solutionId" element={<SolutionDetail />} />
                       <Route path="/notlar" element={<Notes />} />
                       <Route path="/notlar/:id" element={<NoteDetail />} />
                       <Route path="/ilgincler" element={<InterestingFacts />} />
